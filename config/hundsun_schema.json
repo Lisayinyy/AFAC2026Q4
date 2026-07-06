@@ -1,0 +1,23 @@
+{
+  "_comment": "恒生(Hundsun) Level-2 快照字段 → 内部 schema 映射。按你的恒生库实际列名修改左侧键名即可，无需改代码。id_map: 恒生列名→内部列名; book: 十档价量列名模板({i}为档位1..n)。",
+  "id_map": {
+    "SecurityID": "symbol",
+    "TradeDate": "dt",
+    "DataTimeStamp": "date",
+    "TradeTime": "hh",
+    "LastPx": "price",
+    "TotalVolumeTrade": "volume",
+    "TotalValueTrade": "amount",
+    "NumTrades": "transactions",
+    "TotalBidQty": "totalbidvolume",
+    "TotalOfferQty": "totalaskvolume",
+    "BigOrderVolume": "bigordervolume"
+  },
+  "book": {
+    "n_levels": 10,
+    "bid_px": "BidPrice{i}",
+    "bid_vol": "BidOrderQty{i}",
+    "ask_px": "OfferPrice{i}",
+    "ask_vol": "OfferOrderQty{i}"
+  }
+}

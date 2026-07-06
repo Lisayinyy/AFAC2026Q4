@@ -38,37 +38,17 @@ def load_feature_set(sample_dir: str | None = None) -> tuple[pd.DataFrame, bool]
 
 
 def load_snapshot(path: str) -> pd.DataFrame:
-    """加载原始十档快照数据并聚合为日级特征。
+    """加载原始十档快照数据并聚合为日级特征（委托 adapters.XlsxSource）。
 
-    path 可为：
-      - 单个文件 (xlsx/xls/csv)
-      - 目录：加载其中所有 *.xlsx/*.xls/*.csv 并合并（多股票-多日）
+    path 可为单个文件 (xlsx/xls/csv) 或目录（合并其中所有快照文件）。
     返回已 build_from_snapshot 的日级特征 DataFrame。
     """
     from . import snapshot_features
+    from .adapters import XlsxSource
 
-    files = _resolve_snapshot_files(path)
-    if not files:
-        raise FileNotFoundError(f"未找到快照文件: {path}")
-
-    frames = []
-    for fp in files:
-        if fp.lower().endswith((".xlsx", ".xls")):
-            raw = pd.read_excel(fp)
-        else:
-            raw = pd.read_csv(fp)
-        frames.append(_normalize_id_cols(raw))
-    raw_all = pd.concat(frames, ignore_index=True)
-    return snapshot_features.build_from_snapshot(raw_all)
-
-
-def _resolve_snapshot_files(path: str) -> list[str]:
-    if os.path.isdir(path):
-        out = []
-        for ext in ("*.xlsx", "*.xls", "*.csv"):
-            out.extend(glob.glob(os.path.join(path, ext)))
-        return sorted(out)
-    return [path] if os.path.isfile(path) else []
+    raw = XlsxSource(path).load()
+    raw = _normalize_id_cols(raw)
+    return snapshot_features.build_from_snapshot(raw)
 
 
 def _normalize_id_cols(df: pd.DataFrame) -> pd.DataFrame:

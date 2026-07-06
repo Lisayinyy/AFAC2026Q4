@@ -71,26 +71,46 @@ AFAC2026/
 ├── README.md
 ├── init_env.sh              # 环境依赖安装
 ├── requirements.txt
-├── main.py                  # 统一入口
+├── main.py                  # 单次入口 (单文件/样例/合成)
+├── run_batch.py             # 批量/每日入口 (股票池×交易日 → 每日 submit.zip)
+├── config/
+│   └── hundsun_schema.json  # 恒生字段→内部schema映射(可编辑)
 ├── data/
-│   ├── README.md            # 数据获取与放置说明
-│   └── sample/              # 样例特征集(需自行下载放入)
+│   ├── README.md
+│   └── sample/
 ├── src/
-│   ├── config.py            # 路径与超参
-│   ├── data_loader.py       # 数据加载 + 合成兜底 + 快照加载
-│   ├── features.py          # 特征工程(参考特征集路径)
+│   ├── config.py
+│   ├── adapters/            # 数据适配层
+│   │   ├── base.py          # SnapshotSource 抽象 + 十档组装
+│   │   ├── hundsun.py       # 恒生适配器(fetch_fn/DSN/导出目录 三选一)
+│   │   ├── xlsx_source.py   # 官方 xlsx/csv
+│   │   └── synthetic_source.py
+│   ├── data_loader.py       # 加载 + 合成兜底
+│   ├── features.py          # 特征工程
 │   ├── snapshot_features.py # 十档快照 → 日级特征
-│   ├── distance.py          # Wasserstein + DTW 距离
-│   ├── pattern_clustering.py# Task1
-│   ├── capital_classifier.py# Task2 (散户/游资/量化) 规则判别
-│   ├── self_training.py     # Task2 弱标签自训练(高置信伪标签→logistic)
+│   ├── distance.py          # Wasserstein + DTW
+│   ├── pattern_clustering.py# Task1 交易模式识别
+│   ├── capital_classifier.py# Task2 规则判别(散户/游资/量化)
+│   ├── self_training.py     # Task2 弱标签自训练
+│   ├── intention.py         # 意图-模式一致性校验
+│   ├── market_phase.py      # 行情阶段识别(吸筹/试盘/拉升/派发/整理)
+│   ├── evaluation.py        # 离线自检代理指标
+│   ├── pipeline.py          # 核心编排(被 main/run_batch 共用)
 │   └── submit.py            # 生成 submit.zip
-├── docs/
-│   ├── competition_rules.md # 完整赛题规则(存档)
-│   ├── feature_dictionary.md# 参考特征集字段字典
-│   └── solution_design.md   # 方案设计
-└── output/                  # 运行产物(gitignore)
+├── tests/
+│   └── test_pipeline.py     # 冒烟测试
+└── docs/
+    ├── competition_rules.md
+    ├── feature_dictionary.md
+    ├── data_inventory.md    # 官方资料清单解读
+    ├── hundsun_setup.md     # 恒生数据接入指南
+    └── solution_design.md
 ```
+
+## 数据接入（恒生 Level-2）
+
+数据走 `src/adapters/` 抽象层。恒生接入三选一（注入查询函数 / SQLAlchemy DSN / 导出目录），
+字段映射在 `config/hundsun_schema.json` 配置。详见 [`docs/hundsun_setup.md`](docs/hundsun_setup.md)。
 
 ## 赛程
 
