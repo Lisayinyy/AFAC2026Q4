@@ -108,6 +108,11 @@ def aggregate_daily(df: pd.DataFrame) -> pd.DataFrame:
         open_pct = damt[open_mask.values].sum() / total_amt if open_mask.any() else 0.0
         close_pct = damt[close_mask.values].sum() / total_amt if close_mask.any() else 0.0
 
+        # 真实日内序列（供 DTW）：把连续交易时段切成 N 桶，每桶取盘口不平衡均值。
+        # A股连续竞价 9:30-11:30 + 13:00-15:00 = 240 分钟，切 8 桶(每桶30min)。
+        imbalance_series = snap["ob_imbalance"] if "ob_imbalance" in snap else pd.Series(0.0, index=g.index)
+        intraday_seq = _bin_intraday(mins, imbalance_series, n_bins=8)
+
         # 价格路径特征
         ret = price.pct_change().replace([np.inf, -np.inf], np.nan).fillna(0)
         px_std = float(ret.std() * 100)
@@ -186,12 +191,36 @@ def aggregate_daily(df: pd.DataFrame) -> pd.DataFrame:
             "px_std_pct": px_std,
             "vwap_dev": vwap_dev,
             "n_snapshots": n,
+            # 真实日内盘口不平衡序列（供 Task1 DTW 形态比较）
+            "net_active_seq": ";".join(f"{x:.4f}" for x in intraday_seq),
         })
 
-    out = pd.DataFrame(rows)
-    # 供 DTW 的日内序列（按半小时净不平衡）
-    out["net_active_seq"] = out["net_active"].apply(lambda x: ";".join([f"{x:.4f}"] * 8))
-    return out
+    return pd.DataFrame(rows)
+
+
+# A股连续竞价分钟区间：9:30-11:30 (570-690) + 13:00-15:00 (780-900)
+_TRADING_MINUTES = list(range(9 * 60 + 30, 11 * 60 + 30)) + list(range(13 * 60, 15 * 60))
+
+
+def _bin_intraday(mins: pd.Series, values: pd.Series, n_bins: int = 8) -> list[float]:
+    """把连续交易时段按分钟切成 n_bins 桶，每桶取 values 均值，构成日内序列。"""
+    edges = np.linspace(0, len(_TRADING_MINUTES), n_bins + 1).astype(int)
+    min_to_bin = {}
+    for b in range(n_bins):
+        for idx in range(edges[b], edges[b + 1]):
+            min_to_bin[_TRADING_MINUTES[idx]] = b
+
+    sums = np.zeros(n_bins)
+    cnts = np.zeros(n_bins)
+    for m, v in zip(mins.to_numpy(), values.to_numpy()):
+        if np.isnan(m):
+            continue
+        b = min_to_bin.get(int(m))
+        if b is not None:
+            sums[b] += float(v)
+            cnts[b] += 1
+    seq = np.where(cnts > 0, sums / np.maximum(cnts, 1), 0.0)
+    return [round(float(x), 4) for x in seq]
 
 
 def _avg_order_size(snap: pd.DataFrame) -> float:
