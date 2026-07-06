@@ -24,6 +24,10 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="AFAC2026 资金流向识别管线")
     ap.add_argument("--alpha", type=float, default=config.WASSERSTEIN_ALPHA,
                     help="综合距离中 Wasserstein 权重 (0-1)")
+    ap.add_argument("--source", choices=["auto", "sample", "snapshot", "synthetic"],
+                    default="auto", help="数据来源")
+    ap.add_argument("--snapshot-path", default=None,
+                    help="原始十档快照文件路径 (xlsx/csv), 配合 --source snapshot")
     args = ap.parse_args()
 
     print("=" * 60)
@@ -31,8 +35,18 @@ def main() -> None:
     print("=" * 60)
 
     # 1) 数据
-    df, is_syn = data_loader.load_feature_set()
-    src_tag = "合成兜底数据(SYNTHETIC)" if is_syn else f"官方样例集 ({config.SAMPLE_DIR})"
+    if args.source == "snapshot":
+        if not args.snapshot_path:
+            raise SystemExit("--source snapshot 需配合 --snapshot-path 指定文件")
+        df = data_loader.load_snapshot(args.snapshot_path)
+        is_syn = False
+        src_tag = f"原始十档快照 ({args.snapshot_path})"
+    elif args.source == "synthetic":
+        df, is_syn = data_loader.generate_synthetic(), True
+        src_tag = "合成兜底数据(SYNTHETIC)"
+    else:  # auto / sample
+        df, is_syn = data_loader.load_feature_set()
+        src_tag = "合成兜底数据(SYNTHETIC)" if is_syn else f"官方样例集 ({config.SAMPLE_DIR})"
     print(f"[1/5] 数据加载: {src_tag} | {len(df)} 行, {df['symbol'].nunique()} 只股票")
     if is_syn:
         print("      ⚠ 未发现 data/sample/*.csv, 使用合成数据验证管线。放入真实样例集后重跑即为正式提交。")

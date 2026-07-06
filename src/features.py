@@ -20,7 +20,15 @@ def _get(df: pd.DataFrame, col: str, default: float = 0.0) -> pd.Series:
 
 
 def build_features(df: pd.DataFrame) -> pd.DataFrame:
-    """返回带派生特征列的 DataFrame（原列保留）。"""
+    """返回带派生特征列的 DataFrame（原列保留）。
+
+    若 df 已含全部派生特征（如来自 snapshot_features 的日级特征），直接返回，
+    避免用缺失的原始字段把已算好的派生特征覆盖为默认值。
+    """
+    derived = {"regularity", "iceberg", "net_active", "edge_concentration", "t0_balance"}
+    if derived.issubset(df.columns):
+        return df.copy()
+
     out = df.copy()
 
     rs_cv = _get(out, "rs_interval_cv")

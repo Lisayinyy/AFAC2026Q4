@@ -37,6 +37,22 @@ def load_feature_set(sample_dir: str | None = None) -> tuple[pd.DataFrame, bool]
     return generate_synthetic(), True
 
 
+def load_snapshot(path: str) -> pd.DataFrame:
+    """加载原始十档快照数据(xlsx/csv)并聚合为日级特征。
+
+    用于官方赛题一训练数据格式（每行一个快照 tick）。
+    返回已 build_from_snapshot 的日级特征 DataFrame。
+    """
+    from . import snapshot_features
+
+    if path.lower().endswith((".xlsx", ".xls")):
+        raw = pd.read_excel(path)
+    else:
+        raw = pd.read_csv(path)
+    raw = _normalize_id_cols(raw)
+    return snapshot_features.build_from_snapshot(raw)
+
+
 def _normalize_id_cols(df: pd.DataFrame) -> pd.DataFrame:
     """兼容官方可能的列名差异（stock_code/transaction_date）。"""
     rename = {}

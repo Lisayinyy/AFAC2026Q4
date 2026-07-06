@@ -29,18 +29,23 @@ def _weighted_score(df: pd.DataFrame, weights: dict[str, float]) -> pd.Series:
 
 
 def classify_type(df: pd.DataFrame) -> pd.DataFrame:
-    """输出 capital_type + type_confidence。"""
+    """输出 capital_type(散户/游资/量化) + type_confidence。"""
     quant = _weighted_score(df, config.QUANT_WEIGHTS)
     hot = _weighted_score(df, config.HOT_MONEY_WEIGHTS)
+    retail = _weighted_score(df, config.RETAIL_WEIGHTS)
 
     out = pd.DataFrame(index=df.index)
     out["quant_score"] = quant
     out["hot_money_score"] = hot
-    # softmax 间隔作为置信度
-    exp_q, exp_h = np.exp(quant), np.exp(hot)
-    p_hot = exp_h / (exp_q + exp_h)
-    out["capital_type"] = np.where(hot > quant, "游资", "量化")
-    out["type_confidence"] = np.where(hot > quant, p_hot, 1 - p_hot).round(4)
+    out["retail_score"] = retail
+
+    scores = np.vstack([retail.to_numpy(), hot.to_numpy(), quant.to_numpy()]).T  # 顺序对齐 CAPITAL_TYPES
+    labels = np.array(config.CAPITAL_TYPES)[scores.argmax(axis=1)]
+    # softmax 置信度
+    exp = np.exp(scores - scores.max(axis=1, keepdims=True))
+    proba = exp / exp.sum(axis=1, keepdims=True)
+    out["capital_type"] = labels
+    out["type_confidence"] = proba.max(axis=1).round(4)
     return out
 
 

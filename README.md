@@ -9,7 +9,7 @@
 | 任务 | 目标 | 输出文件 | 评估指标 | 权重 |
 |------|------|----------|----------|------|
 | **Task 1 交易模式识别** | 对每只股票每个交易日的盘面行为聚类出交易模式 | `pattern_reco.csv` | 类间区分度 + 类内聚合度（Wasserstein + DTW 距离） | 0.4 |
-| **Task 2 资金类型识别** | 识别主导参与者类型（游资/量化）及买卖意图 | `predict_result.csv` | 加权 F1-Score | 0.6 |
+| **Task 2 资金类型识别** | 识别主导参与者类型（散户/游资/量化）及买卖意图 | `predict_result.csv` | 加权 F1-Score | 0.6 |
 
 **总得分 = Task1 × 0.4 + Task2 × 0.6**，均基于股票市场最新真实交易数据、T+5 日前后公布，采用移动加权平均。
 
@@ -54,9 +54,14 @@ Level-2 原始数据 / 官方参考特征集
 ```bash
 bash init_env.sh          # 安装依赖
 python main.py            # 端到端跑通，产出 output/submit.zip
+
+# 指定数据来源
+python main.py --source sample                                   # 读 data/sample/*.csv (参考特征集)
+python main.py --source snapshot --snapshot-path data/xxx.xlsx   # 读原始十档快照
+python main.py --source synthetic                                # 合成兜底(验证管线)
 ```
 
-无真实数据时，`main.py` 会用内置的**合成数据**（模拟游资/量化两类微观结构）跑通全流程，用于验证管线正确性。放入真实数据后即可产出正式提交文件。
+无真实数据时，`main.py` 会用内置的**合成数据**（模拟游资/量化/散户微观结构）跑通全流程。放入官方数据后即可产出正式提交文件。已实测支持官方**原始十档快照**格式（`bids/asks` 10 档 JSON + `order` 拆单 + `bigOrderPercent`）。
 
 ## 目录结构
 
@@ -71,11 +76,12 @@ AFAC2026/
 │   └── sample/              # 样例特征集(需自行下载放入)
 ├── src/
 │   ├── config.py            # 路径与超参
-│   ├── data_loader.py       # 数据加载 + 合成兜底
-│   ├── features.py          # 特征工程
+│   ├── data_loader.py       # 数据加载 + 合成兜底 + 快照加载
+│   ├── features.py          # 特征工程(参考特征集路径)
+│   ├── snapshot_features.py # 十档快照 → 日级特征
 │   ├── distance.py          # Wasserstein + DTW 距离
 │   ├── pattern_clustering.py# Task1
-│   ├── capital_classifier.py# Task2
+│   ├── capital_classifier.py# Task2 (散户/游资/量化)
 │   └── submit.py            # 生成 submit.zip
 ├── docs/
 │   ├── competition_rules.md # 完整赛题规则(存档)

@@ -55,18 +55,22 @@
 
 ## 4. Task 2 — 资金类型 + 意图识别（`capital_classifier.py`）
 
-### 4.1 capital_type：游资 vs 量化
+### 4.1 capital_type：散户 / 游资 / 量化（三类）
 
-构造**量化得分** `quant_score`（0-1）与**游资得分** `hot_money_score`，由特征线性/逻辑组合：
+> **实测修正**：官方 A 榜提交样例中 `capital_type` 为**三类**（散户/游资/量化），非赛题目标页所述的两类。已据此实现三类判别。
+
+为每类构造得分，取 argmax，softmax 给置信度：
 
 ```
 quant_score  ∝  regularity↑ + rs_split_similarity↑ + cb_fast_cancel_ratio↑
-                + 换手/T0(买卖均衡)↑ + rs_interval_cv↓
-hot_money_score ∝ oss_hot_money_count_pct↑ + edge_concentration↑
-                + pi_herfindahl↑ + aggression↑ + 大单占比↑ + 手动间歇(rs_interval_cv高)↑
+                + t0_balance↑（买卖均衡高换手）
+hot_money_score ∝ oss_hot_money_count_pct↑ + edge_concentration↑ + big_order_pct↑
+                + pi_herfindahl↑ + aggression↑ + 手动间歇↑
+retail_score ∝ small_order_pct↑ + (1-big_order_pct)↑ + direction_noise↑
+                + (1-edge_concentration)↑   # 小单主导、方向混乱、时段分散
 ```
 
-判别：`capital_type = 游资 if hot_money_score > quant_score else 量化`；置信度 = softmax 间隔。权重初值来自案例的领域先验，后续可用**聚类结构 + 少量高置信弱标签自训练**（logistic）微调，但保持特征驱动、可复现。
+判别：`capital_type = argmax(retail, hot_money, quant)`；权重初值来自案例领域先验（`config.py`），后续可用聚类结构 + 高置信弱标签自训练微调，保持特征驱动、可复现。
 
 ### 4.2 capital_intention：买入 / 卖出 / 中性 / T0交易
 
@@ -92,11 +96,18 @@ hot_money_score ∝ oss_hot_money_count_pct↑ + edge_concentration↑
 ## 6. 迭代路线（“一直完善”）
 
 - [x] v0：管线骨架 + 合成数据跑通 + 规则版 Task1/Task2。
-- [ ] v1：接入官方样例集，校准特征族与阈值。
-- [ ] v2：Wasserstein/DTW 距离矩阵 + 层次聚类调簇数，稳健化模式命名。
-- [ ] v3：量化/游资判别自训练（高置信弱标签 → logistic/GBDT），交叉验证结构稳定性。
+- [x] v1：接入真实数据（官方**原始十档快照** `snapshot_features.py`）；修正 `capital_type` 为**三类**（散户/游资/量化）；`pattern_type` 词表对齐官方样例（大单吸筹/对倒拉升/压单吸货/集合竞价异动/分时脉冲/量化T0/散户博弈…）；股票代码保留 `.SH/.SZ` 后缀；真实数据端到端验证通过。
+- [ ] v2：Wasserstein/DTW 距离矩阵 + 层次聚类调簇数，稳健化模式命名；从快照 `order` 数组挖掘拆单/冰山更细特征。
+- [ ] v3：量化/游资/散户判别自训练（高置信弱标签 → logistic/GBDT），交叉验证结构稳定性。
 - [ ] v4：意图-模式一致性图谱 + 行情阶段识别；引入盘后新闻做事后校准（仅优化建模）。
 - [ ] v5：A 榜每日提交自动化 + 移动加权效果监控；报告与代码复现打包。
+
+## 附：真实数据结构（实测）
+
+- **训练/样例数据**：官方赛题一训练数据 = **单只股票单日的十档盘口快照序列**（如 603997.SH @ 20260507，4937 个快照 tick）。每行含 price/volume/amount/transactions（累计）、totalbid/askvolume、bigordervolume，及 `bids`/`asks`（10 档 JSON，每档含 `order` 拆单数组与 `bigOrderPercent`）。
+- **股票池**：`股票样本.xlsx` = 100 只沪市标的（`代码.SH` + 简称），为 A/B 榜测试universe。
+- **提交样例**：`pattern_reco.csv` / `predict_result.csv` 四字段，代码带交易所后缀，日期 `YYYYMMDD`。
+- 快照数据无逐笔撤单信息，故撤单类特征（`cb_*`）在快照路径置 0，改由盘口 `order` 拆单数组与 `bigOrderPercent` 近似大单/冰山行为。
 
 ## 7. 评估自检（离线代理指标）
 
