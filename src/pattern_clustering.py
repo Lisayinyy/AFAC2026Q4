@@ -78,16 +78,16 @@ def _name_cluster(centroid: dict[str, float]) -> tuple[str, str]:
     # 连续小单推升：小单主导 + 净买 + 缓涨
     if small > 0.6 and net > 0.05:
         return _rule("连续小单推升")
+    # 涨停板打开：极高冲击(触及涨停) + 高换手反复打开
+    if impact > 6.0 and herf < 0.3:
+        return _rule("涨停板打开")
     # 盘中诱多：净买后转弱（近似：净买 + 高波动）
     if net > 0.1 and impact > 2.5:
         return _rule("盘中诱多")
     # 日内套利：均衡 + 中等换手
     if balance > 0.7:
         return _rule("日内套利")
-    # 缩量整理：低冲击 + 低集中
-    if impact < 1.0 and edge < 0.3:
-        return _rule("缩量整理")
-    # 兜底：散户博弈
+    # 兜底：散户博弈（低活跃/无主导也归此，对齐官方词表，无“缩量整理”）
     return config.DEFAULT_PATTERN
 
 

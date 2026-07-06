@@ -68,6 +68,10 @@ def validate(pattern_path: str, predict_path: str) -> dict:
     bad_int = set(q["capital_intention"]) - valid_int
     if bad_int:
         issues.append(f"非法 capital_intention: {bad_int}")
+    valid_patterns = {name for name, _ in config.PATTERN_RULES}
+    bad_pat = set(p["pattern_type"]) - valid_patterns
+    if bad_pat:
+        issues.append(f"非官方 pattern_type: {bad_pat}")
     return {"ok": not issues, "issues": issues, "rows": len(p)}
 
 
