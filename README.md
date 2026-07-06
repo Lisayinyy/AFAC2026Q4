@@ -57,8 +57,9 @@ python main.py            # 端到端跑通，产出 output/submit.zip
 
 # 指定数据来源
 python main.py --source sample                                   # 读 data/sample/*.csv (参考特征集)
-python main.py --source snapshot --snapshot-path data/xxx.xlsx   # 读原始十档快照
+python main.py --source snapshot --snapshot-path data/xxx.xlsx   # 读原始十档快照(文件或目录)
 python main.py --source synthetic                                # 合成兜底(验证管线)
+python main.py --source snapshot --snapshot-path data/ --train   # 启用弱标签自训练
 ```
 
 无真实数据时，`main.py` 会用内置的**合成数据**（模拟游资/量化/散户微观结构）跑通全流程。放入官方数据后即可产出正式提交文件。已实测支持官方**原始十档快照**格式（`bids/asks` 10 档 JSON + `order` 拆单 + `bigOrderPercent`）。
@@ -81,7 +82,8 @@ AFAC2026/
 │   ├── snapshot_features.py # 十档快照 → 日级特征
 │   ├── distance.py          # Wasserstein + DTW 距离
 │   ├── pattern_clustering.py# Task1
-│   ├── capital_classifier.py# Task2 (散户/游资/量化)
+│   ├── capital_classifier.py# Task2 (散户/游资/量化) 规则判别
+│   ├── self_training.py     # Task2 弱标签自训练(高置信伪标签→logistic)
 │   └── submit.py            # 生成 submit.zip
 ├── docs/
 │   ├── competition_rules.md # 完整赛题规则(存档)

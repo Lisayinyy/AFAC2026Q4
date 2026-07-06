@@ -81,6 +81,7 @@ QUANT_WEIGHTS = {
     "cb_fast_cancel_ratio": 0.7, # 快速撤单试盘
     "t0_balance": 0.6,           # 买卖均衡高换手
     "iceberg": 0.5,              # 拆单强度
+    "iceberg_repeat": 0.6,       # 等量重复拆单(程序化特征)
 }
 HOT_MONEY_WEIGHTS = {
     "oss_hot_money_count_pct": 1.0,
@@ -95,7 +96,8 @@ HOT_MONEY_WEIGHTS = {
 RETAIL_WEIGHTS = {
     "small_order_pct": 1.0,      # 小单占比高
     "low_big_order": 0.9,        # 1 - big_order_pct
-    "direction_noise": 0.7,      # 方向混乱(净主动接近0但非量化均衡)
+    "direction_noise": 0.7,      # 方向混乱(盘口不平衡时序波动大)
     "low_concentration": 0.6,    # 1 - edge_concentration
     "oss_small_amount_pct": 0.6, # 参考特征集小单占比
+    "l1_order_entropy": 0.6,     # 订单量分散(无程序化等量拆单)
 }

@@ -40,27 +40,63 @@ def _parse_levels(raw) -> list[dict]:
     return out
 
 
+def _order_stats(orders: list[float]) -> dict:
+    """L1 拆单数组统计：拆单笔数、冰山重复度、最大单占比、订单量熵。"""
+    if not orders:
+        return {"n": 0, "iceberg_repeat": 0.0, "max_share": 0.0, "entropy": 0.0}
+    arr = np.asarray([o for o in orders if o > 0], dtype=float)
+    if arr.size == 0:
+        return {"n": 0, "iceberg_repeat": 0.0, "max_share": 0.0, "entropy": 0.0}
+    total = arr.sum()
+    # 冰山：把单量按最近 100 股归桶，最大同量桶占比越高越像程序化等量拆单
+    buckets = np.round(arr / 100.0) * 100.0
+    _, counts = np.unique(buckets, return_counts=True)
+    iceberg_repeat = counts.max() / arr.size
+    max_share = arr.max() / (total + EPS)
+    p = arr / (total + EPS)
+    entropy = float(-(p * np.log(p + EPS)).sum() / (np.log(arr.size) + EPS)) if arr.size > 1 else 0.0
+    return {"n": int(arr.size), "iceberg_repeat": float(iceberg_repeat),
+            "max_share": float(max_share), "entropy": entropy}
+
+
 def _snapshot_row_features(row: pd.Series) -> dict:
-    """单个快照的盘口结构特征。"""
+    """单个快照的盘口结构特征（含全10档深度 + L1 拆单细节）。"""
     bids = _parse_levels(row.get("bids"))
     asks = _parse_levels(row.get("asks"))
     f = {}
 
+    # L1 不平衡（总委托量口径）
     tbv = float(row.get("totalbidvolume", 0) or 0)
     tav = float(row.get("totalaskvolume", 0) or 0)
-    f["ob_imbalance"] = (tbv - tav) / (tbv + tav + EPS)     # >0 买方深度占优
+    f["ob_imbalance"] = (tbv - tav) / (tbv + tav + EPS)
 
-    # 价差（以一档价）
+    # 全10档不平衡（按贴近盘口程度加权：一档权重最高）
+    depth = min(len(bids), len(asks))
+    if depth > 0:
+        w = np.array([1.0 / (i + 1) for i in range(depth)])
+        bv = np.array([bids[i]["volume"] for i in range(depth)])
+        av = np.array([asks[i]["volume"] for i in range(depth)])
+        wb, wa = (w * bv).sum(), (w * av).sum()
+        f["ob_imbalance_10"] = (wb - wa) / (wb + wa + EPS)
+        # 深度斜率：累计量随档位增长速率（挂单是否堆在远端）
+        cb = np.cumsum(bv)
+        f["depth_slope_bid"] = float(np.polyfit(range(depth), cb / (cb[-1] + EPS), 1)[0]) if depth > 1 else 0.0
+    else:
+        f["ob_imbalance_10"] = 0.0
+        f["depth_slope_bid"] = 0.0
+
     best_bid = bids[0]["price"] if bids else 0.0
     best_ask = asks[0]["price"] if asks else 0.0
     mid = (best_bid + best_ask) / 2 if (best_bid and best_ask) else float(row.get("price", 0) or 0)
     f["spread"] = (best_ask - best_bid) / (mid + EPS) if (best_bid and best_ask) else 0.0
 
-    # 一档拆单数（order 数组长度）→ 冰山/拆单证据
-    bid_orders = bids[0]["orders"] if bids else []
-    ask_orders = asks[0]["orders"] if asks else []
-    f["l1_split_count"] = len(bid_orders) + len(ask_orders)
-    # 一档大单占比
+    # L1 拆单细节（order 数组仅一档提供）
+    bid_os = _order_stats(bids[0]["orders"]) if bids else _order_stats([])
+    ask_os = _order_stats(asks[0]["orders"]) if asks else _order_stats([])
+    f["l1_split_count"] = bid_os["n"] + ask_os["n"]
+    f["l1_iceberg_repeat"] = max(bid_os["iceberg_repeat"], ask_os["iceberg_repeat"])
+    f["l1_max_order_share"] = max(bid_os["max_share"], ask_os["max_share"])
+    f["l1_order_entropy"] = (bid_os["entropy"] + ask_os["entropy"]) / 2
     f["l1_big_pct"] = (bids[0]["big_pct"] if bids else 0.0) + (asks[0]["big_pct"] if asks else 0.0)
     return f
 
@@ -134,6 +170,14 @@ def aggregate_daily(df: pd.DataFrame) -> pd.DataFrame:
         big_pct = float(snap["l1_big_pct"].mean()) if "l1_big_pct" in snap else 0.0
         big_pct = big_pct / 100 if big_pct > 1 else big_pct
         imbalance = float(snap["ob_imbalance"].mean()) if "ob_imbalance" in snap else 0.0
+        imbalance_10 = float(snap["ob_imbalance_10"].mean()) if "ob_imbalance_10" in snap else imbalance
+        # L1 拆单细节
+        iceberg_repeat = float(snap["l1_iceberg_repeat"].mean()) if "l1_iceberg_repeat" in snap else 0.0
+        max_order_share = float(snap["l1_max_order_share"].mean()) if "l1_max_order_share" in snap else 0.0
+        order_entropy = float(snap["l1_order_entropy"].mean()) if "l1_order_entropy" in snap else 0.0
+        depth_slope = float(snap["depth_slope_bid"].mean()) if "depth_slope_bid" in snap else 0.0
+        # 盘口不平衡的时序波动性（散户方向混乱→高）
+        imbalance_vol = float(snap["ob_imbalance"].std()) if "ob_imbalance" in snap else 0.0
 
         # 快照节奏规整度：快照间隔的变异系数（近似成交节奏）
         if "date" in g.columns and n > 2:
@@ -150,9 +194,14 @@ def aggregate_daily(df: pd.DataFrame) -> pd.DataFrame:
         # 订单规模结构近似：用一档单笔均量分档（小/中/大）
         avg_order = _avg_order_size(snap)
 
-        net_active = imbalance  # 盘口不平衡近似净主动方向
+        net_active = imbalance_10  # 多档加权盘口不平衡近似净主动方向
         regularity = 1.0 / (1.0 + interval_cv)
-        iceberg = float(np.clip(l1_split / 6.0, 0, 1)) * (1 if big_pct > 0.3 else 0.6)
+        # 冰山强度：综合拆单笔数 + 等量重复度 + 大单占比（更细粒度）
+        iceberg = float(np.clip(
+            0.4 * np.clip(l1_split / 6.0, 0, 1)
+            + 0.4 * iceberg_repeat
+            + 0.2 * (big_pct > 0.3),
+            0, 1))
 
         rows.append({
             "symbol": str(sym),
@@ -182,7 +231,14 @@ def aggregate_daily(df: pd.DataFrame) -> pd.DataFrame:
             "small_order_pct": float(np.clip(1 - big_pct, 0, 1)),
             "low_big_order": float(np.clip(1 - big_pct, 0, 1)),
             "low_concentration": float(np.clip(1 - (open_pct + close_pct), 0, 1)),
-            "direction_noise": float(np.clip(1 - abs(net_active), 0, 1)) * (0.5 if regularity > 0.8 else 1.0),
+            "direction_noise": float(np.clip(imbalance_vol * 2, 0, 1)) * (0.5 if regularity > 0.8 else 1.0),
+            # 细粒度盘口/拆单特征（order 数组 + 全10档深度）
+            "iceberg_repeat": iceberg_repeat,
+            "l1_max_order_share": max_order_share,
+            "l1_order_entropy": order_entropy,
+            "ob_imbalance_10": imbalance_10,
+            "depth_slope_bid": depth_slope,
+            "imbalance_vol": imbalance_vol,
             # 分布/序列（供 Task1 距离）
             "oss_buy_amount_pct": float(np.clip(0.5 + net_active / 2, 0.02, 0.98)),
             "oss_sell_amount_pct": float(np.clip(0.5 - net_active / 2, 0.02, 0.98)),

@@ -94,4 +94,6 @@ MODEL_FEATURE_COLS = [
     "oss_hot_money_count_pct", "oss_mega_amount_pct",
     "pi_herfindahl_30min", "pi_max_price_impact_pct",
     "ap_unilateral_intensity",
+    # 快照细粒度特征（缺失时下游按 0 处理，兼容参考特征集路径）
+    "iceberg_repeat", "l1_order_entropy", "ob_imbalance_10", "depth_slope_bid",
 ]

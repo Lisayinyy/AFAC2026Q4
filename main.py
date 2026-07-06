@@ -16,6 +16,7 @@ from src import (
     data_loader,
     features,
     pattern_clustering,
+    self_training,
     submit,
 )
 
@@ -28,6 +29,8 @@ def main() -> None:
                     default="auto", help="数据来源")
     ap.add_argument("--snapshot-path", default=None,
                     help="原始十档快照文件路径 (xlsx/csv), 配合 --source snapshot")
+    ap.add_argument("--train", action="store_true",
+                    help="启用弱标签自训练(高置信规则伪标签→logistic);样本不足自动回退规则")
     args = ap.parse_args()
 
     print("=" * 60)
@@ -63,9 +66,19 @@ def main() -> None:
     print("      模式分布:", patt["pattern_type"].value_counts().to_dict())
 
     # 4) Task2 资金类型 + 意图
-    pred = capital_classifier.run(df_feat)
+    if args.train:
+        pred, tmeta = self_training.run(df_feat, use_self_training=True)
+        print(f"[4/5] Task2 资金识别 (method={tmeta.get('method')}): "
+              f"类型分布 {pred['capital_type'].value_counts().to_dict()}")
+        if tmeta.get("method") != "rule":
+            print(f"      自训练: 伪标签{tmeta.get('pseudo_n')}条 {tmeta.get('pseudo_dist')} "
+                  f"| 与规则一致率={tmeta.get('agree_with_rule')}")
+        elif tmeta.get("reason"):
+            print(f"      (自训练回退: {tmeta['reason']})")
+    else:
+        pred = capital_classifier.run(df_feat)
+        print(f"[4/5] Task2 资金识别: 类型分布 {pred['capital_type'].value_counts().to_dict()}")
     check = capital_classifier.self_check(df_feat, pred)
-    print(f"[4/5] Task2 资金识别: 类型分布 {pred['capital_type'].value_counts().to_dict()}")
     if "type_weighted_f1" in check:
         print(f"      合成自检 加权F1(类型)={check['type_weighted_f1']:.3f}")
     print("      意图分布:", check.get("intention_dist"))
