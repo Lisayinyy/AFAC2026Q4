@@ -1,9 +1,9 @@
 numpy>=1.24
 pandas>=2.0
 scikit-learn>=1.3
+openpyxl>=3.1         # 读取 xlsx（股票池 + 官方样例 xlsx）
 
 # 可选（按需）：
-# openpyxl>=3.1        # 读取 xlsx（pandas.read_excel 依赖）
 # sqlalchemy>=2.0      # 恒生 DSN 直连 (run_batch --source hundsun --dsn ...)
 # pyarrow>=12.0        # 读取恒生 parquet 导出
 # pytest>=7.0          # 运行 tests/

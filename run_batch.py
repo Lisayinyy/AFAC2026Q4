@@ -53,12 +53,22 @@ def main() -> None:
     ap.add_argument("--dates", nargs="*", default=[], help="交易日列表 YYYYMMDD")
     ap.add_argument("--alpha", type=float, default=config.WASSERSTEIN_ALPHA)
     ap.add_argument("--train", action="store_true")
+    ap.add_argument("--fetch-fn-mode", choices=["auto", "fallback", "sdk", "dsn", "export"],
+                    default="auto",
+                    help="恒生数据源获取方式：auto(按 env 自动探测，缺则兜底) / fallback(强制校准合成) / sdk / dsn / export")
     args = ap.parse_args()
 
     is_synth = args.source == "synthetic"
     if args.source == "hundsun":
-        source = get_source("hundsun", export_dir=args.export_dir, dsn=args.dsn,
-                            sql_template=args.sql_template)
+        # 工厂：按 fetch-fn-mode 注入 fetch_fn，未指定时走 auto(SDK/DSN/exports/兜底)
+        if args.fetch_fn_mode in ("auto", "fallback"):
+            from src.adapters.hundsun_fetch import make_fetch_fn
+            fetch_fn = make_fetch_fn(force_fallback=(args.fetch_fn_mode == "fallback"))
+            source = get_source("hundsun", fetch_fn=fetch_fn)
+        else:
+            # 保留原 export_dir/dsn 路径
+            source = get_source("hundsun", export_dir=args.export_dir, dsn=args.dsn,
+                                sql_template=args.sql_template)
     elif args.source == "xlsx":
         source = get_source("xlsx", path=args.path or config.SAMPLE_DIR)
     else:

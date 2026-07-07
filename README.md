@@ -60,9 +60,26 @@ python main.py --source sample                                   # 读 data/samp
 python main.py --source snapshot --snapshot-path data/xxx.xlsx   # 读原始十档快照(文件或目录)
 python main.py --source synthetic                                # 合成兜底(验证管线)
 python main.py --source snapshot --snapshot-path data/ --train   # 启用弱标签自训练
+
+# 批量每日提交（100 只标的 × 多交易日）
+python run_batch.py --source hundsun \
+  --stocks-file data/股票样本.xlsx \
+  --dates 20260629 20260630 20260701 20260702 20260703 \
+  --fetch-fn-mode auto --train
 ```
 
 无真实数据时，`main.py` 会用内置的**合成数据**（模拟游资/量化/散户微观结构）跑通全流程。放入官方数据后即可产出正式提交文件。已实测支持官方**原始十档快照**格式（`bids/asks` 10 档 JSON + `order` 拆单 + `bigOrderPercent`）。
+
+### 恒生 L2 数据接入（自动探测 + 兜底生成器）
+
+`run_batch.py --source hundsun` 启动后按以下优先级自动探测数据源：
+
+1. **`HUNDSUN_SDK_PATH`** 指向本地 SDK 模块（暴露 `query_l2_snapshot(symbols, dates)`）
+2. **`HUNDSUN_DSN`** SQLAlchemy DSN（oracle/mysql/mssql/...）
+3. **`HUNDSUN_EXPORT_DIR`** 恒生导出的 csv/parquet 目录
+4. **兜底**：基于官方样例（603997.SH / 20260507 / 4937 tick）统计结构校准的 Level-2 生成器
+
+详见 [`docs/hundsun_setup.md`](docs/hundsun_setup.md)。所有列名映射在 `config/hundsun_schema.json`，无需改代码。
 
 ## 目录结构
 
@@ -79,10 +96,16 @@ AFAC2026/
 │   ├── README.md
 │   └── sample/
 ├── src/
+│   ├── adapters/
+│   │   ├── hundsun.py        # 恒生适配器 (fetch_fn/DSN/SDK/exports/兜底)
+│   │   ├── hundsun_fetch.py  # ★ 4 种接入方式 + 校准式合成 L2 生成器
+│   │   ├── xlsx_source.py
+│   │   └── synthetic_source.py
 │   ├── config.py
 │   ├── adapters/            # 数据适配层
 │   │   ├── base.py          # SnapshotSource 抽象 + 十档组装
-│   │   ├── hundsun.py       # 恒生适配器(fetch_fn/DSN/导出目录 三选一)
+│   │   ├── hundsun.py       # 恒生适配器 (列名 → 内部 schema)
+│   │   ├── hundsun_fetch.py # ★ 4 种接入方式 (SDK/DSN/exports/兜底)
 │   │   ├── xlsx_source.py   # 官方 xlsx/csv
 │   │   └── synthetic_source.py
 │   ├── data_loader.py       # 加载 + 合成兜底
