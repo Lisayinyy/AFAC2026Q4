@@ -56,13 +56,28 @@ def main() -> None:
     ap.add_argument("--fetch-fn-mode", choices=["auto", "fallback", "sdk", "dsn", "export"],
                     default="auto",
                     help="恒生数据源获取方式：auto(按 env 自动探测，缺则兜底) / fallback(强制校准合成) / sdk / dsn / export")
+    ap.add_argument("--allow-fallback", action="store_true",
+                    help="允许 auto 模式在无真实数据源时降级到合成数据(仅验证管线, 产物严禁提交)")
     args = ap.parse_args()
 
     is_synth = args.source == "synthetic"
+    data_provenance = args.source  # 数据来源标记，写入 batch_report
     if args.source == "hundsun":
         # 工厂：按 fetch-fn-mode 注入 fetch_fn，未指定时走 auto(SDK/DSN/exports/兜底)
         if args.fetch_fn_mode in ("auto", "fallback"):
-            from src.adapters.hundsun_fetch import make_fetch_fn
+            from src.adapters.hundsun_fetch import has_real_hundsun_source, make_fetch_fn
+            using_fallback = args.fetch_fn_mode == "fallback" or not has_real_hundsun_source()
+            if using_fallback:
+                data_provenance = "hundsun_FALLBACK_SYNTHETIC"
+                print("=" * 68)
+                print("⚠⚠ 警告: 未检测到真实恒生数据源(SDK/DSN/exports), 将使用校准式合成数据。")
+                print("⚠⚠ 产出的 submit.zip 仅用于验证管线, **严禁提交到天池**——")
+                print("⚠⚠ 评分基于真实行情, 合成数据得分无效且可能被判为随机填充违规。")
+                print("=" * 68)
+                if args.fetch_fn_mode == "auto" and not args.allow_fallback:
+                    raise SystemExit(
+                        "已中止: auto 模式下无真实数据源。确认只是验证管线请加 --allow-fallback,\n"
+                        "或显式使用 --fetch-fn-mode fallback。接真实源见 docs/hundsun_setup.md。")
             fetch_fn = make_fetch_fn(force_fallback=(args.fetch_fn_mode == "fallback"))
             source = get_source("hundsun", fetch_fn=fetch_fn)
         else:
@@ -103,9 +118,15 @@ def main() -> None:
             batch_report[str(date)] = {"error": "validation", "issues": val["issues"]}
             continue
         zp = submit.pack(pp, qp, os.path.join(outdir, "submit.zip"))
+        if data_provenance == "hundsun_FALLBACK_SYNTHETIC":
+            with open(os.path.join(outdir, "SYNTHETIC_DO_NOT_SUBMIT.txt"), "w",
+                      encoding="utf-8") as mf:
+                mf.write("此目录产物基于校准式合成数据, 仅用于管线验证, 严禁提交到天池。\n")
         print(f"  [{date}] ✓ {val['rows']} 行 → {zp} | 模式{res['report']['task1'].get('n_clusters')}类 "
               f"| 类型{res['report']['task2']['type_dist']}")
-        batch_report[str(date)] = {"rows": val["rows"], "zip": zp, "report": res["report"]}
+        batch_report[str(date)] = {"rows": val["rows"], "zip": zp,
+                                   "data_provenance": data_provenance,
+                                   "report": res["report"]}
 
     rep_path = os.path.join(config.OUTPUT_DIR, "batch_report.json")
     os.makedirs(config.OUTPUT_DIR, exist_ok=True)
