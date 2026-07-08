@@ -30,9 +30,12 @@ class DomainIndex:
         # 精确串加权：条款号（第X条）、百分比、金额、年份等命中直接加分
         patterns = re.findall(r"第[一二三四五六七八九十百零\d]+条|\d+(?:\.\d+)?%|\d{4}年|\d+(?:\.\d+)?[万亿]元?", query)
         results = []
-        allowed = set(doc_ids) if doc_ids else None
+        allowed = list(doc_ids) if doc_ids else None
         for i, c in enumerate(self.chunks):
-            if allowed and c["doc_id"] not in allowed:
+            # 前缀匹配：doc_ids 给 csrc_0262 时，附件 csrc_0262_att1 也应纳入
+            if allowed and not any(
+                c["doc_id"] == d or c["doc_id"].startswith(d + "_att") for d in allowed
+            ):
                 continue
             bonus = sum(2.0 for p in patterns if p in c["text"])
             results.append((scores[i] + bonus, c))

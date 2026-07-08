@@ -1,11 +1,49 @@
 # 文档预处理：PDF/txt -> 结构化纯文本（预处理阶段允许非 Qwen 工具）
 import re
 import json
+from html.parser import HTMLParser
 from pathlib import Path
 
 import pdfplumber
 
 from . import config
+
+
+class _HTMLText(HTMLParser):
+    _SKIP = {"script", "style"}
+
+    def __init__(self):
+        super().__init__()
+        self.parts = []
+        self._skip = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self._SKIP:
+            self._skip += 1
+        elif tag in ("p", "br", "div", "tr", "li", "h1", "h2", "h3", "h4", "table"):
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag in self._SKIP and self._skip:
+            self._skip -= 1
+
+    def handle_data(self, data):
+        if not self._skip:
+            self.parts.append(data)
+
+
+def parse_html(path: Path) -> str:
+    for enc in ("utf-8", "gbk"):
+        try:
+            raw = path.read_text(encoding=enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        raw = path.read_text(encoding="utf-8", errors="ignore")
+    p = _HTMLText()
+    p.feed(raw)
+    return "".join(p.parts)
 
 
 def parse_pdf(pdf_path: Path) -> str:
@@ -58,13 +96,21 @@ def chunk_text(text: str, doc_id: str):
     ]
 
 
+_ATT_SUFFIX = re.compile(r"_att\d+$")
+
+
 def iter_domain_docs(domain: str):
-    """遍历某领域全部原始文档，yield (doc_id, path)。doc_id = 文件名去扩展名。"""
+    """遍历某领域全部原始文档，yield (doc_id, path)。doc_id = 文件名去扩展名。
+
+    注意：题目 doc_ids 有的引用正文（csrc_0262 -> html），有的直接引用附件
+    （csrc_0009_att1 -> pdf），因此保留原始 stem，不做归并；
+    正文与附件的关联在检索层通过前缀匹配处理。
+    """
     root = config.RAW_DIR / domain
     if not root.exists():
         return
     for p in sorted(root.rglob("*")):
-        if p.suffix.lower() in (".pdf", ".txt") and p.is_file():
+        if p.suffix.lower() in (".pdf", ".txt", ".html") and p.is_file():
             yield p.stem, p
 
 
@@ -78,7 +124,12 @@ def preprocess_domain(domain: str, force=False):
         if out.exists() and not force:
             continue
         try:
-            text = path.read_text(encoding="utf-8") if path.suffix == ".txt" else parse_pdf(path)
+            if path.suffix.lower() == ".txt":
+                text = path.read_text(encoding="utf-8")
+            elif path.suffix.lower() == ".html":
+                text = parse_html(path)
+            else:
+                text = parse_pdf(path)
         except Exception as e:
             print(f"[WARN] 解析失败 {path}: {e}")
             continue
