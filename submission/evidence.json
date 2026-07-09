@@ -1,0 +1,1477 @@
+{
+  "fc_a_001": {
+    "doc_ids": [
+      "text01",
+      "text02"
+    ],
+    "chunks": [
+      "text01#43",
+      "text02#47",
+      "text01#428",
+      "text02#0",
+      "text01#0",
+      "text01#392",
+      "text01#40",
+      "text01#41"
+    ]
+  },
+  "fc_a_002": {
+    "doc_ids": [
+      "text01",
+      "text14"
+    ],
+    "chunks": [
+      "text01#392",
+      "text14#0",
+      "text14#4",
+      "text14#319",
+      "text14#316",
+      "text01#0",
+      "text01#4",
+      "text14#3"
+    ]
+  },
+  "fc_a_003": {
+    "doc_ids": [
+      "text01",
+      "text03"
+    ],
+    "chunks": [
+      "text03#402",
+      "text03#440",
+      "text01#469"
+    ]
+  },
+  "fc_a_004": {
+    "doc_ids": [
+      "text01",
+      "text13"
+    ],
+    "chunks": [
+      "text01#3",
+      "text01#215",
+      "text01#40",
+      "text01#46",
+      "text01#422",
+      "text01#41",
+      "text01#214"
+    ]
+  },
+  "fc_a_005": {
+    "doc_ids": [
+      "text01",
+      "text10"
+    ],
+    "chunks": [
+      "text01#40",
+      "text10#666",
+      "text01#459",
+      "text10#667",
+      "text01#53",
+      "text10#73",
+      "text10#841",
+      "text10#638"
+    ]
+  },
+  "fc_a_006": {
+    "doc_ids": [
+      "text01",
+      "text04"
+    ],
+    "chunks": [
+      "text04#54",
+      "text04#596",
+      "text01#458",
+      "text04#55"
+    ]
+  },
+  "fc_a_007": {
+    "doc_ids": [
+      "text02",
+      "text14"
+    ],
+    "chunks": [
+      "text14#318",
+      "text14#315",
+      "text14#317",
+      "text14#316",
+      "text14#319",
+      "text14#366",
+      "text14#4",
+      "text14#3"
+    ]
+  },
+  "fc_a_008": {
+    "doc_ids": [
+      "text02",
+      "text03"
+    ],
+    "chunks": [
+      "text02#0",
+      "text03#24",
+      "text03#2",
+      "text03#364"
+    ]
+  },
+  "fc_a_009": {
+    "doc_ids": [
+      "text02",
+      "text10"
+    ],
+    "chunks": [
+      "text10#73",
+      "text10#841",
+      "text02#0",
+      "text10#61",
+      "text02#47",
+      "text10#127",
+      "text10#111"
+    ]
+  },
+  "fc_a_010": {
+    "doc_ids": [
+      "text02",
+      "text06"
+    ],
+    "chunks": [
+      "text06#54",
+      "text06#77",
+      "text06#521",
+      "text06#53",
+      "text06#56",
+      "text06#55",
+      "text06#220",
+      "text06#520"
+    ]
+  },
+  "fc_a_011": {
+    "doc_ids": [
+      "text02",
+      "text07"
+    ],
+    "chunks": [
+      "text02#411",
+      "text02#389",
+      "text02#0",
+      "text02#10",
+      "text02#45",
+      "text02#49",
+      "text02#22",
+      "text02#47"
+    ]
+  },
+  "fc_a_012": {
+    "doc_ids": [
+      "text03",
+      "text13"
+    ],
+    "chunks": [
+      "text13#49",
+      "text03#407",
+      "text03#27",
+      "text13#46",
+      "text13#47",
+      "text13#94"
+    ]
+  },
+  "fc_a_013": {
+    "doc_ids": [
+      "text03",
+      "text10"
+    ],
+    "chunks": [
+      "text10#73",
+      "text10#841",
+      "text10#0",
+      "text03#400",
+      "text03#127",
+      "text03#0",
+      "text10#862",
+      "text10#61"
+    ]
+  },
+  "fc_a_014": {
+    "doc_ids": [
+      "text03",
+      "text08"
+    ],
+    "chunks": [
+      "text08#472",
+      "text08#474",
+      "text08#465",
+      "text08#468",
+      "text03#407",
+      "text03#448",
+      "text08#461",
+      "text08#466"
+    ]
+  },
+  "fc_a_015": {
+    "doc_ids": [
+      "text03",
+      "text14"
+    ],
+    "chunks": [
+      "text14#0",
+      "text14#3",
+      "text14#316",
+      "text14#38",
+      "text14#4"
+    ]
+  },
+  "fc_a_016": {
+    "doc_ids": [
+      "text04",
+      "text09"
+    ],
+    "chunks": [
+      "text04#78",
+      "text09#391",
+      "text09#53",
+      "text04#33"
+    ]
+  },
+  "fc_a_017": {
+    "doc_ids": [
+      "text04",
+      "text05"
+    ],
+    "chunks": [
+      "text04#78",
+      "text04#53",
+      "text05#56"
+    ]
+  },
+  "fc_a_018": {
+    "doc_ids": [
+      "text04",
+      "text06"
+    ],
+    "chunks": [
+      "text06#0",
+      "text04#595",
+      "text04#47",
+      "text04#602",
+      "text06#48",
+      "text04#52",
+      "text06#47",
+      "text04#53"
+    ]
+  },
+  "fc_a_019": {
+    "doc_ids": [
+      "text04",
+      "text07"
+    ],
+    "chunks": [
+      "text04#53",
+      "text04#0",
+      "text07#148",
+      "text04#285",
+      "text04#451"
+    ]
+  },
+  "fc_a_020": {
+    "doc_ids": [
+      "text04",
+      "text11"
+    ],
+    "chunks": [
+      "text04#34",
+      "text04#32",
+      "text04#0"
+    ]
+  },
+  "fin_a_001": {
+    "doc_ids": [
+      "annual_byd_2024_report",
+      "annual_byd_2025_report"
+    ],
+    "chunks": [
+      "annual_byd_2025_report#111",
+      "annual_byd_2024_report#654",
+      "annual_byd_2025_report#16",
+      "annual_byd_2025_report#33",
+      "annual_byd_2025_report#19"
+    ]
+  },
+  "fin_a_002": {
+    "doc_ids": [
+      "annual_catl_2024_report",
+      "annual_catl_2025_report"
+    ],
+    "chunks": [
+      "annual_catl_2025_report#96",
+      "annual_catl_2025_report#146",
+      "annual_catl_2025_report#150",
+      "annual_catl_2025_report#63",
+      "annual_catl_2025_report#149",
+      "annual_catl_2025_report#147",
+      "annual_catl_2025_report#151",
+      "annual_catl_2025_report#148"
+    ]
+  },
+  "fin_a_003": {
+    "doc_ids": [
+      "annual_cscec_2024_report",
+      "annual_cscec_2025_report"
+    ],
+    "chunks": [
+      "annual_cscec_2025_report#128",
+      "annual_cscec_2025_report#129",
+      "annual_cscec_2024_report#128",
+      "annual_cscec_2025_report#125",
+      "annual_cscec_2025_report#24",
+      "annual_cscec_2025_report#100",
+      "annual_cscec_2024_report#129"
+    ]
+  },
+  "fin_a_004": {
+    "doc_ids": [
+      "annual_midea_2024_report",
+      "annual_midea_2025_report"
+    ],
+    "chunks": [
+      "annual_midea_2025_report#89",
+      "annual_midea_2024_report#103",
+      "annual_midea_2024_report#0",
+      "annual_midea_2025_report#101",
+      "annual_midea_2025_report#30",
+      "annual_midea_2025_report#162",
+      "annual_midea_2024_report#33",
+      "annual_midea_2024_report#186"
+    ]
+  },
+  "fin_a_005": {
+    "doc_ids": [
+      "annual_byd_2024_report",
+      "annual_midea_2024_report"
+    ],
+    "chunks": [
+      "annual_midea_2024_report#0",
+      "annual_midea_2024_report#85",
+      "annual_byd_2024_report#1",
+      "annual_midea_2024_report#90",
+      "annual_byd_2024_report#96",
+      "annual_midea_2024_report#103",
+      "annual_midea_2024_report#10"
+    ]
+  },
+  "fin_a_006": {
+    "doc_ids": [
+      "annual_byd_2024_report",
+      "annual_midea_2025_report"
+    ],
+    "chunks": [
+      "annual_midea_2025_report#14",
+      "annual_midea_2025_report#328",
+      "annual_midea_2025_report#10",
+      "annual_midea_2025_report#9"
+    ]
+  },
+  "fin_a_007": {
+    "doc_ids": [
+      "annual_byd_2024_report",
+      "annual_catl_2025_report"
+    ],
+    "chunks": [
+      "annual_catl_2025_report#63",
+      "annual_byd_2024_report#98",
+      "annual_catl_2025_report#151",
+      "annual_catl_2025_report#65",
+      "annual_catl_2025_report#64",
+      "annual_catl_2025_report#552",
+      "annual_catl_2025_report#39",
+      "annual_catl_2025_report#150"
+    ]
+  },
+  "fin_a_008": {
+    "doc_ids": [
+      "annual_byd_2024_report",
+      "annual_catl_2024_report"
+    ],
+    "chunks": [
+      "annual_catl_2024_report#157",
+      "annual_catl_2024_report#580",
+      "annual_byd_2024_report#98",
+      "annual_byd_2024_report#1",
+      "annual_catl_2024_report#12",
+      "annual_catl_2024_report#155",
+      "annual_catl_2024_report#158",
+      "annual_catl_2024_report#159"
+    ]
+  },
+  "fin_a_009": {
+    "doc_ids": [
+      "annual_byd_2024_report",
+      "annual_chinamobile_2025_report"
+    ],
+    "chunks": [
+      "annual_chinamobile_2025_report#30",
+      "annual_byd_2024_report#96",
+      "annual_chinamobile_2025_report#7",
+      "annual_chinamobile_2025_report#27",
+      "annual_chinamobile_2025_report#25",
+      "annual_chinamobile_2025_report#243"
+    ]
+  },
+  "fin_a_010": {
+    "doc_ids": [
+      "annual_byd_2025_report",
+      "annual_midea_2024_report"
+    ],
+    "chunks": [
+      "annual_byd_2025_report#107",
+      "annual_byd_2025_report#159",
+      "annual_midea_2024_report#92",
+      "annual_midea_2024_report#532"
+    ]
+  },
+  "fin_a_011": {
+    "doc_ids": [
+      "annual_byd_2025_report",
+      "annual_midea_2025_report"
+    ],
+    "chunks": [
+      "annual_midea_2025_report#99",
+      "annual_midea_2025_report#162",
+      "annual_byd_2025_report#111",
+      "annual_midea_2025_report#3",
+      "annual_midea_2025_report#165",
+      "annual_midea_2025_report#30",
+      "annual_midea_2025_report#101",
+      "annual_midea_2025_report#10"
+    ]
+  },
+  "fin_a_012": {
+    "doc_ids": [
+      "annual_byd_2025_report",
+      "annual_chinamobile_2025_report"
+    ],
+    "chunks": [
+      "annual_byd_2025_report#111",
+      "annual_chinamobile_2025_report#30",
+      "annual_chinamobile_2025_report#14",
+      "annual_chinamobile_2025_report#27",
+      "annual_byd_2025_report#33",
+      "annual_chinamobile_2025_report#25"
+    ]
+  },
+  "fin_a_013": {
+    "doc_ids": [
+      "annual_byd_2025_report",
+      "annual_catl_2024_report"
+    ],
+    "chunks": [
+      "annual_catl_2024_report#1",
+      "annual_byd_2025_report#208",
+      "annual_catl_2024_report#580",
+      "annual_catl_2024_report#157",
+      "annual_catl_2024_report#156"
+    ]
+  },
+  "fin_a_014": {
+    "doc_ids": [
+      "annual_byd_2025_report",
+      "annual_catl_2025_report"
+    ],
+    "chunks": [
+      "annual_catl_2025_report#4",
+      "annual_catl_2025_report#63",
+      "annual_catl_2025_report#150",
+      "annual_catl_2025_report#148",
+      "annual_catl_2025_report#149",
+      "annual_catl_2025_report#65",
+      "annual_byd_2025_report#111",
+      "annual_catl_2025_report#39"
+    ]
+  },
+  "fin_a_015": {
+    "doc_ids": [
+      "annual_catl_2024_report",
+      "annual_chinamobile_2025_report"
+    ],
+    "chunks": [
+      "annual_catl_2024_report#155",
+      "annual_catl_2024_report#157",
+      "annual_catl_2024_report#158",
+      "annual_catl_2024_report#154",
+      "annual_catl_2024_report#580",
+      "annual_catl_2024_report#581",
+      "annual_catl_2024_report#159",
+      "annual_chinamobile_2025_report#27"
+    ]
+  },
+  "fin_a_016": {
+    "doc_ids": [
+      "annual_catl_2024_report",
+      "annual_midea_2025_report"
+    ],
+    "chunks": [
+      "annual_midea_2025_report#163",
+      "annual_midea_2025_report#3",
+      "annual_midea_2025_report#162",
+      "annual_catl_2024_report#156",
+      "annual_catl_2024_report#153",
+      "annual_catl_2024_report#1",
+      "annual_catl_2024_report#581",
+      "annual_catl_2024_report#154"
+    ]
+  },
+  "fin_a_017": {
+    "doc_ids": [
+      "annual_catl_2024_report",
+      "annual_cscec_2024_report"
+    ],
+    "chunks": [
+      "annual_catl_2024_report#57",
+      "annual_cscec_2024_report#123",
+      "annual_cscec_2024_report#5",
+      "annual_cscec_2024_report#124",
+      "annual_catl_2024_report#581",
+      "annual_cscec_2024_report#35",
+      "annual_cscec_2024_report#127",
+      "annual_cscec_2024_report#629"
+    ]
+  },
+  "fin_a_018": {
+    "doc_ids": [
+      "annual_catl_2025_report",
+      "annual_midea_2025_report"
+    ],
+    "chunks": [
+      "annual_midea_2025_report#30",
+      "annual_catl_2025_report#0",
+      "annual_catl_2025_report#39",
+      "annual_catl_2025_report#27",
+      "annual_midea_2025_report#0",
+      "annual_midea_2025_report#37"
+    ]
+  },
+  "fin_a_019": {
+    "doc_ids": [
+      "annual_catl_2025_report",
+      "annual_midea_2024_report"
+    ],
+    "chunks": [
+      "annual_catl_2025_report#96",
+      "annual_catl_2025_report#146",
+      "annual_catl_2025_report#151",
+      "annual_catl_2025_report#149",
+      "annual_midea_2024_report#83",
+      "annual_catl_2025_report#150",
+      "annual_catl_2025_report#552",
+      "annual_catl_2025_report#5"
+    ]
+  },
+  "fin_a_020": {
+    "doc_ids": [
+      "annual_catl_2025_report",
+      "annual_chinamobile_2025_report"
+    ],
+    "chunks": [
+      "annual_chinamobile_2025_report#27",
+      "annual_catl_2025_report#62",
+      "annual_catl_2025_report#65",
+      "annual_chinamobile_2025_report#25",
+      "annual_catl_2025_report#54",
+      "annual_catl_2025_report#48",
+      "annual_catl_2025_report#63"
+    ]
+  },
+  "ins_a_001": {
+    "doc_ids": [
+      "1",
+      "2",
+      "15",
+      "16"
+    ],
+    "chunks": [
+      "1#0",
+      "2#2",
+      "2#22",
+      "2#4",
+      "2#14",
+      "15#5",
+      "15#4",
+      "15#7"
+    ]
+  },
+  "ins_a_002": {
+    "doc_ids": [
+      "1",
+      "2",
+      "16"
+    ],
+    "chunks": [
+      "1#23",
+      "1#24",
+      "1#0",
+      "1#2",
+      "2#20",
+      "2#2",
+      "16#0",
+      "1#36"
+    ]
+  },
+  "ins_a_003": {
+    "doc_ids": [
+      "3",
+      "5",
+      "6"
+    ],
+    "chunks": [
+      "3#17",
+      "5#63",
+      "5#64",
+      "5#62",
+      "5#6",
+      "5#68",
+      "3#4",
+      "5#1"
+    ]
+  },
+  "ins_a_004": {
+    "doc_ids": [
+      "4",
+      "5",
+      "6",
+      "12"
+    ],
+    "chunks": [
+      "5#4",
+      "4#3",
+      "6#2",
+      "6#9",
+      "6#22",
+      "6#11",
+      "5#68",
+      "6#10"
+    ]
+  },
+  "ins_a_005": {
+    "doc_ids": [
+      "1",
+      "4",
+      "7",
+      "13"
+    ],
+    "chunks": [
+      "7#5",
+      "7#10",
+      "4#11",
+      "4#56",
+      "4#13",
+      "13#2",
+      "13#3"
+    ]
+  },
+  "ins_a_006": {
+    "doc_ids": [
+      "5",
+      "6"
+    ],
+    "chunks": [
+      "5#62",
+      "5#63",
+      "5#64",
+      "5#6",
+      "5#7",
+      "6#2",
+      "5#1",
+      "5#68"
+    ]
+  },
+  "ins_a_007": {
+    "doc_ids": [
+      "1",
+      "2",
+      "16"
+    ],
+    "chunks": [
+      "16#22",
+      "2#14",
+      "1#2",
+      "16#26",
+      "16#29",
+      "2#7",
+      "16#5",
+      "1#23"
+    ]
+  },
+  "ins_a_008": {
+    "doc_ids": [
+      "3",
+      "4",
+      "5"
+    ],
+    "chunks": [
+      "5#32",
+      "3#13",
+      "5#34",
+      "3#2",
+      "5#24",
+      "5#27",
+      "5#37",
+      "5#36"
+    ]
+  },
+  "ins_a_009": {
+    "doc_ids": [
+      "7",
+      "8",
+      "9"
+    ],
+    "chunks": [
+      "9#9",
+      "9#18",
+      "9#0",
+      "9#19",
+      "9#16",
+      "9#17",
+      "8#2",
+      "8#3"
+    ]
+  },
+  "ins_a_010": {
+    "doc_ids": [
+      "1",
+      "2",
+      "4",
+      "16"
+    ],
+    "chunks": [
+      "1#23",
+      "2#17",
+      "1#24"
+    ]
+  },
+  "ins_a_011": {
+    "doc_ids": [
+      "3",
+      "5",
+      "6",
+      "8"
+    ],
+    "chunks": [
+      "6#2",
+      "5#62",
+      "3#1",
+      "3#0",
+      "3#17",
+      "5#68",
+      "8#0",
+      "5#64"
+    ]
+  },
+  "ins_a_012": {
+    "doc_ids": [
+      "2",
+      "6",
+      "11",
+      "14"
+    ],
+    "chunks": [
+      "2#2",
+      "6#2",
+      "2#10",
+      "2#1",
+      "2#7",
+      "14#0",
+      "2#14",
+      "6#8"
+    ]
+  },
+  "ins_a_013": {
+    "doc_ids": [
+      "1",
+      "15",
+      "16"
+    ],
+    "chunks": [
+      "1#3",
+      "1#2",
+      "15#4",
+      "16#15",
+      "15#3",
+      "16#0",
+      "1#0",
+      "16#13"
+    ]
+  },
+  "ins_a_014": {
+    "doc_ids": [
+      "4",
+      "5",
+      "7",
+      "8"
+    ],
+    "chunks": [
+      "8#2",
+      "7#0",
+      "4#44",
+      "5#76",
+      "4#46",
+      "8#3",
+      "7#2",
+      "7#3"
+    ]
+  },
+  "ins_a_015": {
+    "doc_ids": [
+      "1",
+      "4",
+      "7",
+      "13"
+    ],
+    "chunks": [
+      "4#11",
+      "4#13",
+      "1#8",
+      "4#16",
+      "1#10",
+      "4#14"
+    ]
+  },
+  "ins_a_016": {
+    "doc_ids": [
+      "5",
+      "6",
+      "9",
+      "10"
+    ],
+    "chunks": [
+      "10#17",
+      "9#17",
+      "10#4",
+      "9#4"
+    ]
+  },
+  "ins_a_017": {
+    "doc_ids": [
+      "2",
+      "3",
+      "8",
+      "11"
+    ],
+    "chunks": [
+      "3#17",
+      "8#2",
+      "3#1",
+      "3#2",
+      "8#4",
+      "3#3",
+      "3#7",
+      "11#0"
+    ]
+  },
+  "ins_a_018": {
+    "doc_ids": [
+      "3",
+      "4",
+      "5",
+      "6"
+    ],
+    "chunks": [
+      "6#17",
+      "6#16",
+      "5#7",
+      "6#18",
+      "3#4",
+      "5#8"
+    ]
+  },
+  "ins_a_019": {
+    "doc_ids": [
+      "1",
+      "2",
+      "4",
+      "16"
+    ],
+    "chunks": [
+      "4#22",
+      "1#19",
+      "1#0",
+      "1#2",
+      "16#0",
+      "4#2",
+      "4#0",
+      "1#36"
+    ]
+  },
+  "ins_a_020": {
+    "doc_ids": [
+      "5",
+      "6",
+      "12"
+    ],
+    "chunks": [
+      "6#59",
+      "12#0",
+      "12#8"
+    ]
+  },
+  "reg_a_001": {
+    "doc_ids": [
+      "strict_v3_008_中国人民银行令〔2025〕第12号（金融机构客户受益所有人识别管理办法）",
+      "strict_v3_009_中国人民银行_国家金融监督管理总局_中国证券监督管理委员会令〔2025〕第11号（金融机构客户尽职调查和客户身份资料及交易记录保存管理办法）"
+    ],
+    "chunks": [
+      "strict_v3_008_中国人民银行令〔2025〕第12号（金融机构客户受益所有人识别管理办法）#0",
+      "strict_v3_008_中国人民银行令〔2025〕第12号（金融机构客户受益所有人识别管理办法）#13",
+      "strict_v3_008_中国人民银行令〔2025〕第12号（金融机构客户受益所有人识别管理办法）#16",
+      "strict_v3_008_中国人民银行令〔2025〕第12号（金融机构客户受益所有人识别管理办法）#12",
+      "strict_v3_009_中国人民银行_国家金融监督管理总局_中国证券监督管理委员会令〔2025〕第11号（金融机构客户尽职调查和客户身份资料及交易记录保存管理办法）#21"
+    ]
+  },
+  "reg_a_002": {
+    "doc_ids": [
+      "strict_v3_008_中国人民银行令〔2025〕第12号（金融机构客户受益所有人识别管理办法）",
+      "strict_v3_017_中华人民共和国反洗钱法"
+    ],
+    "chunks": [
+      "strict_v3_008_中国人民银行令〔2025〕第12号（金融机构客户受益所有人识别管理办法）#12",
+      "strict_v3_008_中国人民银行令〔2025〕第12号（金融机构客户受益所有人识别管理办法）#16",
+      "strict_v3_017_中华人民共和国反洗钱法#7",
+      "strict_v3_017_中华人民共和国反洗钱法#1"
+    ]
+  },
+  "reg_a_003": {
+    "doc_ids": [
+      "strict_v3_008_中国人民银行令〔2025〕第12号（金融机构客户受益所有人识别管理办法）",
+      "strict_v3_015_中国人民银行令〔2025〕第3号（中国人民银行业务领域数据安全管理办法）"
+    ],
+    "chunks": [
+      "strict_v3_015_中国人民银行令〔2025〕第3号（中国人民银行业务领域数据安全管理办法）#4",
+      "strict_v3_015_中国人民银行令〔2025〕第3号（中国人民银行业务领域数据安全管理办法）#8",
+      "strict_v3_015_中国人民银行令〔2025〕第3号（中国人民银行业务领域数据安全管理办法）#10",
+      "strict_v3_008_中国人民银行令〔2025〕第12号（金融机构客户受益所有人识别管理办法）#8"
+    ]
+  },
+  "reg_a_004": {
+    "doc_ids": [
+      "strict_v3_008_中国人民银行令〔2025〕第12号（金融机构客户受益所有人识别管理办法）",
+      "strict_v3_016_中国人民银行_国家金融监督管理总局令〔2025〕第2号（银行卡清算机构管理办法）"
+    ],
+    "chunks": [
+      "strict_v3_016_中国人民银行_国家金融监督管理总局令〔2025〕第2号（银行卡清算机构管理办法）#8",
+      "strict_v3_008_中国人民银行令〔2025〕第12号（金融机构客户受益所有人识别管理办法）#16",
+      "strict_v3_016_中国人民银行_国家金融监督管理总局令〔2025〕第2号（银行卡清算机构管理办法）#14",
+      "strict_v3_016_中国人民银行_国家金融监督管理总局令〔2025〕第2号（银行卡清算机构管理办法）#13",
+      "strict_v3_016_中国人民银行_国家金融监督管理总局令〔2025〕第2号（银行卡清算机构管理办法）#6"
+    ]
+  },
+  "reg_a_005": {
+    "doc_ids": [
+      "strict_v3_008_中国人民银行令〔2025〕第12号（金融机构客户受益所有人识别管理办法）",
+      "strict_v3_018_中国人民银行令〔2024〕第4号（非银行支付机构监督管理条例实施细则）"
+    ],
+    "chunks": [
+      "strict_v3_018_中国人民银行令〔2024〕第4号（非银行支付机构监督管理条例实施细则）#26",
+      "strict_v3_008_中国人民银行令〔2025〕第12号（金融机构客户受益所有人识别管理办法）#13",
+      "strict_v3_008_中国人民银行令〔2025〕第12号（金融机构客户受益所有人识别管理办法）#12",
+      "strict_v3_008_中国人民银行令〔2025〕第12号（金融机构客户受益所有人识别管理办法）#15",
+      "strict_v3_008_中国人民银行令〔2025〕第12号（金融机构客户受益所有人识别管理办法）#9",
+      "strict_v3_008_中国人民银行令〔2025〕第12号（金融机构客户受益所有人识别管理办法）#11",
+      "strict_v3_008_中国人民银行令〔2025〕第12号（金融机构客户受益所有人识别管理办法）#8",
+      "strict_v3_018_中国人民银行令〔2024〕第4号（非银行支付机构监督管理条例实施细则）#8"
+    ]
+  },
+  "reg_a_006": {
+    "doc_ids": [
+      "csrc_0009_att1",
+      "strict_v3_008_中国人民银行令〔2025〕第12号（金融机构客户受益所有人识别管理办法）"
+    ],
+    "chunks": [
+      "strict_v3_008_中国人民银行令〔2025〕第12号（金融机构客户受益所有人识别管理办法）#16",
+      "csrc_0009_att1#3",
+      "csrc_0009_att1#9",
+      "csrc_0009_att1#17",
+      "csrc_0009_att1#1",
+      "csrc_0009_att1#15",
+      "csrc_0009_att1#2",
+      "csrc_0009_att1#4"
+    ]
+  },
+  "reg_a_007": {
+    "doc_ids": [
+      "strict_v3_009_中国人民银行_国家金融监督管理总局_中国证券监督管理委员会令〔2025〕第11号（金融机构客户尽职调查和客户身份资料及交易记录保存管理办法）",
+      "strict_v3_017_中华人民共和国反洗钱法"
+    ],
+    "chunks": [
+      "strict_v3_009_中国人民银行_国家金融监督管理总局_中国证券监督管理委员会令〔2025〕第11号（金融机构客户尽职调查和客户身份资料及交易记录保存管理办法）#16",
+      "strict_v3_009_中国人民银行_国家金融监督管理总局_中国证券监督管理委员会令〔2025〕第11号（金融机构客户尽职调查和客户身份资料及交易记录保存管理办法）#0",
+      "strict_v3_009_中国人民银行_国家金融监督管理总局_中国证券监督管理委员会令〔2025〕第11号（金融机构客户尽职调查和客户身份资料及交易记录保存管理办法）#21",
+      "strict_v3_009_中国人民银行_国家金融监督管理总局_中国证券监督管理委员会令〔2025〕第11号（金融机构客户尽职调查和客户身份资料及交易记录保存管理办法）#5"
+    ]
+  },
+  "reg_a_008": {
+    "doc_ids": [
+      "strict_v3_009_中国人民银行_国家金融监督管理总局_中国证券监督管理委员会令〔2025〕第11号（金融机构客户尽职调查和客户身份资料及交易记录保存管理办法）",
+      "strict_v3_016_中国人民银行_国家金融监督管理总局令〔2025〕第2号（银行卡清算机构管理办法）"
+    ],
+    "chunks": [
+      "strict_v3_016_中国人民银行_国家金融监督管理总局令〔2025〕第2号（银行卡清算机构管理办法）#8",
+      "strict_v3_016_中国人民银行_国家金融监督管理总局令〔2025〕第2号（银行卡清算机构管理办法）#14",
+      "strict_v3_009_中国人民银行_国家金融监督管理总局_中国证券监督管理委员会令〔2025〕第11号（金融机构客户尽职调查和客户身份资料及交易记录保存管理办法）#19",
+      "strict_v3_016_中国人民银行_国家金融监督管理总局令〔2025〕第2号（银行卡清算机构管理办法）#6",
+      "strict_v3_009_中国人民银行_国家金融监督管理总局_中国证券监督管理委员会令〔2025〕第11号（金融机构客户尽职调查和客户身份资料及交易记录保存管理办法）#1",
+      "strict_v3_016_中国人民银行_国家金融监督管理总局令〔2025〕第2号（银行卡清算机构管理办法）#7",
+      "strict_v3_009_中国人民银行_国家金融监督管理总局_中国证券监督管理委员会令〔2025〕第11号（金融机构客户尽职调查和客户身份资料及交易记录保存管理办法）#17",
+      "strict_v3_009_中国人民银行_国家金融监督管理总局_中国证券监督管理委员会令〔2025〕第11号（金融机构客户尽职调查和客户身份资料及交易记录保存管理办法）#7"
+    ]
+  },
+  "reg_a_009": {
+    "doc_ids": [
+      "strict_v3_009_中国人民银行_国家金融监督管理总局_中国证券监督管理委员会令〔2025〕第11号（金融机构客户尽职调查和客户身份资料及交易记录保存管理办法）",
+      "strict_v3_015_中国人民银行令〔2025〕第3号（中国人民银行业务领域数据安全管理办法）"
+    ],
+    "chunks": [
+      "strict_v3_015_中国人民银行令〔2025〕第3号（中国人民银行业务领域数据安全管理办法）#7",
+      "strict_v3_015_中国人民银行令〔2025〕第3号（中国人民银行业务领域数据安全管理办法）#15",
+      "strict_v3_015_中国人民银行令〔2025〕第3号（中国人民银行业务领域数据安全管理办法）#14",
+      "strict_v3_015_中国人民银行令〔2025〕第3号（中国人民银行业务领域数据安全管理办法）#13",
+      "strict_v3_015_中国人民银行令〔2025〕第3号（中国人民银行业务领域数据安全管理办法）#12",
+      "strict_v3_015_中国人民银行令〔2025〕第3号（中国人民银行业务领域数据安全管理办法）#0",
+      "strict_v3_015_中国人民银行令〔2025〕第3号（中国人民银行业务领域数据安全管理办法）#2",
+      "strict_v3_009_中国人民银行_国家金融监督管理总局_中国证券监督管理委员会令〔2025〕第11号（金融机构客户尽职调查和客户身份资料及交易记录保存管理办法）#1"
+    ]
+  },
+  "reg_a_010": {
+    "doc_ids": [
+      "strict_v3_009_中国人民银行_国家金融监督管理总局_中国证券监督管理委员会令〔2025〕第11号（金融机构客户尽职调查和客户身份资料及交易记录保存管理办法）",
+      "strict_v3_018_中国人民银行令〔2024〕第4号（非银行支付机构监督管理条例实施细则）"
+    ],
+    "chunks": [
+      "strict_v3_018_中国人民银行令〔2024〕第4号（非银行支付机构监督管理条例实施细则）#26",
+      "strict_v3_009_中国人民银行_国家金融监督管理总局_中国证券监督管理委员会令〔2025〕第11号（金融机构客户尽职调查和客户身份资料及交易记录保存管理办法）#11",
+      "strict_v3_018_中国人民银行令〔2024〕第4号（非银行支付机构监督管理条例实施细则）#17",
+      "strict_v3_009_中国人民银行_国家金融监督管理总局_中国证券监督管理委员会令〔2025〕第11号（金融机构客户尽职调查和客户身份资料及交易记录保存管理办法）#17",
+      "strict_v3_018_中国人民银行令〔2024〕第4号（非银行支付机构监督管理条例实施细则）#6",
+      "strict_v3_018_中国人民银行令〔2024〕第4号（非银行支付机构监督管理条例实施细则）#23",
+      "strict_v3_018_中国人民银行令〔2024〕第4号（非银行支付机构监督管理条例实施细则）#8",
+      "strict_v3_018_中国人民银行令〔2024〕第4号（非银行支付机构监督管理条例实施细则）#20"
+    ]
+  },
+  "reg_a_011": {
+    "doc_ids": [
+      "csrc_0038_att1",
+      "strict_v3_009_中国人民银行_国家金融监督管理总局_中国证券监督管理委员会令〔2025〕第11号（金融机构客户尽职调查和客户身份资料及交易记录保存管理办法）"
+    ],
+    "chunks": [
+      "strict_v3_009_中国人民银行_国家金融监督管理总局_中国证券监督管理委员会令〔2025〕第11号（金融机构客户尽职调查和客户身份资料及交易记录保存管理办法）#12",
+      "strict_v3_009_中国人民银行_国家金融监督管理总局_中国证券监督管理委员会令〔2025〕第11号（金融机构客户尽职调查和客户身份资料及交易记录保存管理办法）#5",
+      "csrc_0038_att1#3"
+    ]
+  },
+  "reg_a_012": {
+    "doc_ids": [
+      "csrc_0023_att1",
+      "csrc_0038_att1"
+    ],
+    "chunks": [
+      "csrc_0023_att1#3",
+      "csrc_0023_att1#0",
+      "csrc_0023_att1#1",
+      "csrc_0038_att1#0",
+      "csrc_0038_att1#41",
+      "csrc_0038_att1#19",
+      "csrc_0023_att1#16",
+      "csrc_0038_att1#23"
+    ]
+  },
+  "reg_a_013": {
+    "doc_ids": [
+      "csrc_0023_att1",
+      "csrc_0037_att1"
+    ],
+    "chunks": [
+      "csrc_0037_att1#3",
+      "csrc_0023_att1#3",
+      "csrc_0023_att1#2",
+      "csrc_0037_att1#4",
+      "csrc_0023_att1#10",
+      "csrc_0023_att1#4",
+      "csrc_0037_att1#23",
+      "csrc_0037_att1#0"
+    ]
+  },
+  "reg_a_014": {
+    "doc_ids": [
+      "csrc_0023_att1",
+      "csrc_0035_att1"
+    ],
+    "chunks": [
+      "csrc_0035_att1#14",
+      "csrc_0035_att1#19",
+      "csrc_0035_att1#25",
+      "csrc_0035_att1#15",
+      "csrc_0023_att1#3",
+      "csrc_0035_att1#23"
+    ]
+  },
+  "reg_a_015": {
+    "doc_ids": [
+      "csrc_0009_att1",
+      "csrc_0023_att1"
+    ],
+    "chunks": [
+      "csrc_0009_att1#4",
+      "csrc_0009_att1#2",
+      "csrc_0009_att1#3"
+    ]
+  },
+  "reg_a_016": {
+    "doc_ids": [
+      "csrc_0023_att1",
+      "csrc_0271"
+    ],
+    "chunks": [
+      "csrc_0023_att1#3",
+      "csrc_0271#22",
+      "csrc_0271#13",
+      "csrc_0271#20",
+      "csrc_0271#15",
+      "csrc_0271#19",
+      "csrc_0271#16",
+      "csrc_0271#12"
+    ]
+  },
+  "reg_a_017": {
+    "doc_ids": [
+      "csrc_0023_att1",
+      "csrc_0262"
+    ],
+    "chunks": [
+      "csrc_0023_att1#3",
+      "csrc_0023_att1#0",
+      "csrc_0262#9",
+      "csrc_0262#15"
+    ]
+  },
+  "reg_a_018": {
+    "doc_ids": [
+      "csrc_0009_att1",
+      "csrc_0027_att1"
+    ],
+    "chunks": [
+      "csrc_0027_att1#21",
+      "csrc_0027_att1#9",
+      "csrc_0009_att1#3",
+      "csrc_0009_att1#5",
+      "csrc_0009_att1#15"
+    ]
+  },
+  "reg_a_019": {
+    "doc_ids": [
+      "csrc_0027_att1",
+      "csrc_0377"
+    ],
+    "chunks": [
+      "csrc_0377#4",
+      "csrc_0377#15",
+      "csrc_0377#10",
+      "csrc_0377#2",
+      "csrc_0377#1",
+      "csrc_0027_att1#9",
+      "csrc_0027_att1#22",
+      "csrc_0027_att1#21"
+    ]
+  },
+  "reg_a_020": {
+    "doc_ids": [
+      "csrc_0027_att1",
+      "csrc_0037_att1"
+    ],
+    "chunks": [
+      "csrc_0037_att1#3",
+      "csrc_0037_att1#25",
+      "csrc_0037_att1#2",
+      "csrc_0037_att1#4",
+      "csrc_0037_att1#0",
+      "csrc_0037_att1#20",
+      "csrc_0037_att1#1",
+      "csrc_0037_att1#23"
+    ]
+  },
+  "res_a_001": {
+    "doc_ids": [
+      "pack2_text01",
+      "pack2_text17"
+    ],
+    "chunks": [
+      "pack2_text01#8",
+      "pack2_text01#23",
+      "pack2_text01#44",
+      "pack2_text17#29",
+      "pack2_text01#6"
+    ]
+  },
+  "res_a_002": {
+    "doc_ids": [
+      "pack2_text01",
+      "pack2_text11"
+    ],
+    "chunks": [
+      "pack2_text11#32",
+      "pack2_text01#7",
+      "pack2_text11#1",
+      "pack2_text01#8"
+    ]
+  },
+  "res_a_003": {
+    "doc_ids": [
+      "pack2_text01",
+      "pack2_text19"
+    ],
+    "chunks": [
+      "pack2_text19#4",
+      "pack2_text19#1",
+      "pack2_text01#8",
+      "pack2_text19#28",
+      "pack2_text01#16"
+    ]
+  },
+  "res_a_004": {
+    "doc_ids": [
+      "pack2_text01",
+      "pack2_text09"
+    ],
+    "chunks": [
+      "pack2_text09#62",
+      "pack2_text09#16",
+      "pack2_text09#0",
+      "pack2_text09#70",
+      "pack2_text01#8",
+      "pack2_text09#19",
+      "pack2_text09#59",
+      "pack2_text09#64"
+    ]
+  },
+  "res_a_005": {
+    "doc_ids": [
+      "pack2_text01",
+      "pack2_text03"
+    ],
+    "chunks": [
+      "pack2_text03#16",
+      "pack2_text03#36",
+      "pack2_text01#6",
+      "pack2_text01#44",
+      "pack2_text01#8",
+      "pack2_text03#17",
+      "pack2_text03#15",
+      "pack2_text01#35"
+    ]
+  },
+  "res_a_006": {
+    "doc_ids": [
+      "pack2_text01",
+      "pack2_text10"
+    ],
+    "chunks": [
+      "pack2_text10#0",
+      "pack2_text10#15",
+      "pack2_text10#13",
+      "pack2_text10#14"
+    ]
+  },
+  "res_a_007": {
+    "doc_ids": [
+      "pack2_text02",
+      "pack2_text17"
+    ],
+    "chunks": [
+      "pack2_text02#20",
+      "pack2_text17#14",
+      "pack2_text17#12",
+      "pack2_text02#19"
+    ]
+  },
+  "res_a_008": {
+    "doc_ids": [
+      "pack2_text02",
+      "pack2_text11"
+    ],
+    "chunks": [
+      "pack2_text02#20",
+      "pack2_text11#45",
+      "pack2_text02#19",
+      "pack2_text11#31",
+      "pack2_text11#32",
+      "pack2_text11#40",
+      "pack2_text11#30",
+      "pack2_text11#43"
+    ]
+  },
+  "res_a_009": {
+    "doc_ids": [
+      "pack2_text01",
+      "pack2_text02"
+    ],
+    "chunks": [
+      "pack2_text02#19",
+      "pack2_text02#20",
+      "pack2_text01#8"
+    ]
+  },
+  "res_a_010": {
+    "doc_ids": [
+      "pack2_text02",
+      "pack2_text08"
+    ],
+    "chunks": [
+      "pack2_text08#1",
+      "pack2_text08#2",
+      "pack2_text08#31",
+      "pack2_text02#27",
+      "pack2_text08#9",
+      "pack2_text02#15",
+      "pack2_text08#3",
+      "pack2_text02#22"
+    ]
+  },
+  "res_a_011": {
+    "doc_ids": [
+      "pack2_text02",
+      "pack2_text10"
+    ],
+    "chunks": [
+      "pack2_text10#0",
+      "pack2_text02#20",
+      "pack2_text10#15",
+      "pack2_text02#19",
+      "pack2_text10#13",
+      "pack2_text10#14"
+    ]
+  },
+  "res_a_012": {
+    "doc_ids": [
+      "pack2_text02",
+      "pack2_text09"
+    ],
+    "chunks": [
+      "pack2_text02#20",
+      "pack2_text09#16",
+      "pack2_text09#0",
+      "pack2_text09#62",
+      "pack2_text09#34",
+      "pack2_text09#48",
+      "pack2_text02#19"
+    ]
+  },
+  "res_a_013": {
+    "doc_ids": [
+      "pack2_text03",
+      "pack2_text13"
+    ],
+    "chunks": [
+      "pack2_text13#18",
+      "pack2_text13#13",
+      "pack2_text13#16",
+      "pack2_text13#0",
+      "pack2_text13#32",
+      "pack2_text13#31",
+      "pack2_text13#15",
+      "pack2_text13#14"
+    ]
+  },
+  "res_a_014": {
+    "doc_ids": [
+      "pack2_text03",
+      "pack2_text09"
+    ],
+    "chunks": [
+      "pack2_text03#16",
+      "pack2_text09#62",
+      "pack2_text09#16",
+      "pack2_text09#24",
+      "pack2_text09#58",
+      "pack2_text09#18",
+      "pack2_text09#64",
+      "pack2_text09#23"
+    ]
+  },
+  "res_a_015": {
+    "doc_ids": [
+      "pack2_text03",
+      "pack2_text14"
+    ],
+    "chunks": [
+      "pack2_text14#5",
+      "pack2_text14#29",
+      "pack2_text14#28",
+      "pack2_text14#6",
+      "pack2_text14#1"
+    ]
+  },
+  "res_a_016": {
+    "doc_ids": [
+      "pack2_text03",
+      "pack2_text20"
+    ],
+    "chunks": [
+      "pack2_text03#16",
+      "pack2_text20#28",
+      "pack2_text03#35",
+      "pack2_text20#13",
+      "pack2_text20#14",
+      "pack2_text03#39",
+      "pack2_text20#16",
+      "pack2_text20#34"
+    ]
+  },
+  "res_a_017": {
+    "doc_ids": [
+      "pack2_text03",
+      "pack2_text17"
+    ],
+    "chunks": [
+      "pack2_text17#14",
+      "pack2_text17#12",
+      "pack2_text03#26",
+      "pack2_text03#0"
+    ]
+  },
+  "res_a_018": {
+    "doc_ids": [
+      "pack2_text04",
+      "pack2_text07"
+    ],
+    "chunks": [
+      "pack2_text07#14",
+      "pack2_text04#155",
+      "pack2_text04#54",
+      "pack2_text04#7"
+    ]
+  },
+  "res_a_019": {
+    "doc_ids": [
+      "pack2_text04",
+      "pack2_text06"
+    ],
+    "chunks": [
+      "pack2_text06#0",
+      "pack2_text04#304",
+      "pack2_text04#302",
+      "pack2_text06#2",
+      "pack2_text04#2",
+      "pack2_text04#300",
+      "pack2_text04#301",
+      "pack2_text04#232"
+    ]
+  },
+  "res_a_020": {
+    "doc_ids": [
+      "pack2_text04",
+      "pack2_text09"
+    ],
+    "chunks": [
+      "pack2_text09#62",
+      "pack2_text09#0",
+      "pack2_text09#16",
+      "pack2_text09#1",
+      "pack2_text09#31"
+    ]
+  }
+}
