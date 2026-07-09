@@ -8,9 +8,9 @@ from .retrieve import get_index
 from .postprocess import normalize_answer
 
 FORMAT_INSTR = {
-    "mcq": "这是单选题，只有一个正确选项。先简要推理，最后一行必须输出：答案：X（X 为 A/B/C/D 中的一个字母）",
-    "multi": "这是多选题，可能有多个正确选项。逐个选项判断对错后，最后一行必须输出：答案：XY（所有正确选项字母，按字母顺序，无分隔符）。注意漏选/多选均不得分，务必严格依据原文证据判断每个选项。",
-    "tf": "这是判断题。最后一行必须输出：答案：A 或 答案：B（含义以选项为准）",
+    "mcq": "这是单选题，只有一个正确选项。回答的第一行必须是：答案：X（X 为 A/B/C/D 中的一个字母），然后另起一行给出不超过150字的依据。",
+    "multi": "这是多选题，可能有多个正确选项。回答的第一行必须是：答案：XY（所有正确选项字母，按字母顺序，无分隔符），然后另起一行给出每个选项不超过50字的判断依据。注意漏选/多选均不得分，务必严格依据原文证据判断每个选项。",
+    "tf": "这是判断题。回答的第一行必须是：答案：A 或 答案：B（含义以题目选项为准），然后另起一行给出不超过100字的依据。",
 }
 
 DOMAIN_HINTS = {
@@ -83,13 +83,13 @@ def answer_multi_by_option(q, evidence, qid):
             f"参考文档证据：\n{ev}\n\n"
             f"问题背景：{q['question']}\n\n"
             f"待判断陈述（选项{letter}）：{opt}\n\n"
-            f"该陈述根据证据是否准确/正确？先给出关键证据依据（一两句），"
-            f"最后一行输出：判断：正确 或 判断：错误 或 判断：无法确定"
+            f"该陈述根据证据是否准确/正确？回答的第一行必须是：判断：正确 或 判断：错误，"
+            f"然后另起一行给出不超过80字的证据依据。证据不足以支持该陈述时判断为错误。"
         )
         raw = chat([{"role": "system", "content": system}, {"role": "user", "content": user}],
-                   model=config.ANSWER_MODEL, qid=qid, max_tokens=500)
-        tail = raw.strip()[-60:]
-        if "判断：正确" in tail or ("正确" in tail and "错误" not in tail and "无法确定" not in tail):
+                   model=config.ANSWER_MODEL, qid=qid, max_tokens=400)
+        head = raw.strip()[:30]
+        if "判断：正确" in head or head.startswith("正确"):
             picked.append(letter)
     if picked:
         return "".join(sorted(picked))
@@ -125,7 +125,7 @@ def answer_question(q):
         ans = answer_multi_by_option(q, evidence, qid) or ""
     if not ans:
         raw = chat(build_prompt(q, evidence), model=config.ANSWER_MODEL, qid=qid,
-                   max_tokens=800)
+                   max_tokens=1200)
         ans = normalize_answer(raw, q["answer_format"])
     if not ans:  # 最终兜底，不留空（空=必错，蒙也要填）
         ans = "A" if q["answer_format"] in ("mcq", "tf") else "AB"

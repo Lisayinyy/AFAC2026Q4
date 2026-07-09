@@ -16,9 +16,9 @@ DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 API_KEY_ENV = "DASHSCOPE_API_KEY"
 
 # 答题主模型（评测基准为 qwen3.6-plus，以百炼实际模型名为准，可用环境变量覆盖）
-ANSWER_MODEL = os.environ.get("AFAC_ANSWER_MODEL", "qwen-plus")
+ANSWER_MODEL = os.environ.get("AFAC_ANSWER_MODEL", "qwen3.6-plus")
 # 轻量模型：用于证据段落筛选/文档路由，省 token
-LITE_MODEL = os.environ.get("AFAC_LITE_MODEL", "qwen-turbo")
+LITE_MODEL = os.environ.get("AFAC_LITE_MODEL", "qwen-flash")
 
 # ---- Token 预算 ----
 TOKEN_BUDGET_TOTAL = 5_000_000  # 官方 TokenBudget
