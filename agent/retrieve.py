@@ -19,6 +19,25 @@ class DomainIndex:
         self.chunks = chunks
         self._tokens = [tokenize(c["text"]) for c in chunks]
         self.bm25 = BM25Okapi(self._tokens) if chunks else None
+        self._by_id = {c["chunk_id"]: c for c in chunks}
+
+    def expand_neighbors(self, hits, radius=1, max_total=None):
+        """命中块回溯相邻块（同文档前后 radius 块），保持顺序去重。
+
+        表格与条款经常被切块截断，邻块扩展能补全上下文。
+        """
+        out, seen = [], set()
+        for c in hits:
+            doc_id, idx = c["chunk_id"].rsplit("#", 1)
+            for i in range(int(idx) - radius, int(idx) + radius + 1):
+                cid = f"{doc_id}#{i}"
+                n = self._by_id.get(cid)
+                if n and cid not in seen:
+                    seen.add(cid)
+                    out.append(n)
+            if max_total and len(out) >= max_total:
+                break
+        return out[:max_total] if max_total else out
 
     def search(self, query: str, top_k=None, doc_ids=None):
         top_k = top_k or config.TOP_K_CHUNKS

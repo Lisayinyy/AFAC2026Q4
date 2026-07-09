@@ -96,6 +96,29 @@ def answer_multi_by_option(q, evidence, qid):
     return None  # 触发整体作答回退
 
 
+# ---------- 多选仲裁: 双路不一致时加大证据用强模型 ----------
+
+def arbitrate_multi(q, index, doc_ids, ans_a, ans_b, qid):
+    query = q["question"] + " " + " ".join(q["options"].values())
+    wide = index.search(query, top_k=16, doc_ids=doc_ids)
+    wide = index.expand_neighbors(wide, radius=1, max_total=20)
+    options = "\n".join(f"{k}. {v}" for k, v in q["options"].items())
+    user = (
+        f"参考文档证据：\n{_evidence_text(wide)}\n\n"
+        f"问题：{q['question']}\n\n选项：\n{options}\n\n"
+        f"两个独立系统给出了不同答案：{ans_a} 和 {ans_b}。"
+        f"请严格依据证据逐选项裁决。回答第一行必须是：答案：XY（正确选项字母，字母序，无分隔符），"
+        f"然后另起一行给出每个选项一句话依据。"
+    )
+    system = "你是金融文档问答专家与仲裁者。仅依据给出的文档证据判断。" + DOMAIN_HINTS.get(q["domain"], "")
+    try:
+        raw = chat([{"role": "system", "content": system}, {"role": "user", "content": user}],
+                   model=config.ARBITER_MODEL, qid=qid, max_tokens=1000)
+        return normalize_answer(raw, "multi") or ans_a
+    except Exception:
+        return ans_a
+
+
 # ---------- 主入口 ----------
 
 def build_prompt(q, evidence_chunks):
@@ -119,10 +142,19 @@ def answer_question(q):
     query = q["question"] + " " + " ".join(q["options"].values())
     candidates = index.search(query, top_k=config.BM25_CANDIDATES, doc_ids=doc_ids)
     evidence = rerank(q, candidates, qid=qid)
+    # 邻块回溯: 补全被切断的表格/条款上下文
+    evidence = index.expand_neighbors(evidence, radius=1, max_total=config.EVIDENCE_MAX)
 
     ans, raw = "", ""
     if q["answer_format"] == "multi" and config.MULTI_VERIFY:
-        ans = answer_multi_by_option(q, evidence, qid) or ""
+        by_opt = answer_multi_by_option(q, evidence, qid)
+        raw = chat(build_prompt(q, evidence), model=config.ANSWER_MODEL, qid=qid,
+                   max_tokens=1200)
+        whole = normalize_answer(raw, "multi")
+        if by_opt and whole and by_opt != whole:
+            ans = arbitrate_multi(q, index, doc_ids, by_opt, whole, qid)
+        else:
+            ans = by_opt or whole
     if not ans:
         raw = chat(build_prompt(q, evidence), model=config.ANSWER_MODEL, qid=qid,
                    max_tokens=1200)

@@ -33,3 +33,5 @@ BM25_CANDIDATES = 30      # BM25 初筛数量（供 LLM 精排）
 RERANK_ENABLED = os.environ.get("AFAC_RERANK", "1") == "1"
 RERANK_KEEP = 8           # 精排后保留块数
 MULTI_VERIFY = os.environ.get("AFAC_MULTI_VERIFY", "1") == "1"  # 多选逐选项验证
+EVIDENCE_MAX = 14         # 邻块扩展后的证据块上限
+ARBITER_MODEL = os.environ.get("AFAC_ARBITER_MODEL", "qwen3-max")  # 多选双路不一致仲裁
