@@ -272,16 +272,38 @@ class DocRetriever:
 
 
 def build_context(chunks: list[dict], max_chars: int = 10000) -> str:
-    """把召回 chunk 拼成上下文,带来源标注,控制总长度。"""
+    """把召回 chunk 拼成上下文，按句子/表格行边界压缩。
+
+    不在任意字符位置截断正文：普通文本保留完整句子，表格保留完整行；
+    如果 header 已耗尽预算则跳过该块，保证上下文既不超限也不产生半句证据。
+    """
     parts = []
     used = 0
     for c in chunks:
         section = c.get("section") or "未标注章节"
         header = (f"【来源: {c['doc_id']} #chunk{c['chunk_id']} "
                   f"章节:{section} 区域:{c.get('region', '?')}】\n")
+        remaining = max_chars - used - len(header)
+        if remaining <= 0:
+            break
         body = c["text"]
-        if used + len(header) + len(body) > max_chars:
-            body = body[: max(0, max_chars - used - len(header))]
+        if c.get("is_table"):
+            units = [line for line in body.splitlines() if line.strip()]
+            joiner = "\n"
+        else:
+            units = [s.strip() for s in re.findall(r"[^。！？!?；;]+[。！？!?；;]?", body) if s.strip()]
+            joiner = ""
+        selected: list[str] = []
+        size = 0
+        for unit in units:
+            extra = len(unit) + (len(joiner) if selected else 0)
+            if size + extra > remaining:
+                break
+            selected.append(unit)
+            size += extra
+        body = joiner.join(selected)
+        if not body:
+            continue
         parts.append(header + body)
         used += len(header) + len(body)
         if used >= max_chars:

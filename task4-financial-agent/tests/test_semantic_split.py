@@ -6,7 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from semantic_split import split_semantic
 from answer import _allocate_option_budgets, _option_context, _option_has_evidence, _question_budget
 from parse import chunk_text
-from retrieve import normalize_numeric_text, _tokenize
+from retrieve import build_context, normalize_numeric_text, _tokenize
 
 
 def test_semantic_split_keeps_related_sentences_together():
@@ -95,3 +95,15 @@ def test_question_budget_scales_with_complexity_and_is_capped():
     assert simple[0] < complex_q[0]
     assert simple[1] < complex_q[1]
     assert complex_q[0] <= 16 and complex_q[1] <= 9000 and complex_q[2] <= 1800
+
+
+def test_context_truncates_on_sentence_and_table_boundaries():
+    prose = [{"doc_id": "d", "chunk_id": 0, "section": "s", "region": "r",
+              "is_table": False, "text": "条件是资产负债率超过70%。因此必须提交股东大会审议。"}]
+    result = build_context(prose, max_chars=60)
+    assert not result.endswith("资产负债率超过70")
+    assert "超过70%。" in result
+    table = [{"doc_id": "d", "chunk_id": 1, "section": "table", "region": "t",
+              "is_table": True, "text": "年份 | 净利润\n2023 | 10\n2024 | 20"}]
+    table_result = build_context(table, max_chars=70)
+    assert "2023 | 10" in table_result
