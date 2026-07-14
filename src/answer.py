@@ -83,6 +83,19 @@ def _option_context(chunks: list[dict], option: str, max_chars: int = 1800) -> s
     return "\n".join(out)
 
 
+def _option_has_evidence(chunks: list[dict], option: str) -> bool:
+    terms = set(_tokenize(option)) if option else set()
+    terms.update(re.findall(r"\d[\d,.%]*", option))
+    if not terms:
+        return False
+    for chunk in chunks:
+        observed = set(_tokenize(chunk["text"]))
+        observed.update(re.findall(r"\d[\d,.%]*", chunk["text"]))
+        if terms & observed:
+            return True
+    return False
+
+
 def _extract_multi_structured(text: str, valid: list[str]) -> list[str]:
     """优先读取逐选项成立/不成立，再以最终答案行作兜底。"""
     decisions: dict[str, bool] = {}
@@ -122,6 +135,7 @@ def _answer_single(llm: LLMClient, domain: str, question: str, options: dict,
 
 def _answer_multi(llm: LLMClient, domain: str, question: str,
                   options: dict, context: str, chunks: list[dict],
+                  option_budget: int,
                   valid: list[str]) -> list[str]:
     """多选:单次调用内逐项核对(context 只发一次,token 约为逐选项判定的 1/4)。
 
@@ -132,8 +146,9 @@ def _answer_multi(llm: LLMClient, domain: str, question: str,
     letters = "/".join(valid)
     sys = ("你是严谨的金融文档核查专家,只依据资料逐项核对。"
            + _DOMAIN_HINT.get(domain, ""))
+    per_option_budget = max(600, option_budget // max(1, len(options)))
     evidence = "\n\n".join(
-        f"选项 {key} 相关证据:\n{_option_context(chunks, value)}"
+        f"选项 {key} 相关证据:\n{_option_context(chunks, value, per_option_budget)}"
         for key, value in options.items()
     )
     user = (
@@ -166,15 +181,17 @@ def answer_question(llm: LLMClient, q: dict) -> str:
     retriever = DocRetriever(domain, doc_ids, llm=llm)
     # 多选题额外生成选项级紧凑证据；共享上下文仍保留跨文档关系。
     if domain == "financial_reports":
-        top_k, max_chars = 14, 11000
+        top_k, max_chars, option_budget = 14, 7500, 1400
     else:
-        top_k, max_chars = 12, 9000
+        top_k, max_chars, option_budget = 12, 6500, 1200
     chunks = retriever.retrieve(question, list(options.values()),
                                 pool=60, top_k=top_k, domain=domain)
     if fmt == "multi":
         # 每个选项补 2 个窄召回块；共享块负责跨文档关系，窄块负责数字/否定词。
         seen = {(c["doc_id"], c["chunk_id"]) for c in chunks}
         for option in options.values():
+            if _option_has_evidence(chunks, option):
+                continue
             for extra in retriever.retrieve_option_evidence(
                 question, option, top_k=2, domain=domain
             ):
@@ -189,5 +206,7 @@ def answer_question(llm: LLMClient, q: dict) -> str:
 
     # multi:单次调用内逐项核对(实测与逐选项独立判定准确率相当甚至更高,
     # 且 token 约为其 1/3~1/4)。context 大小按领域控制。
-    selected = _answer_multi(llm, domain, question, options, context, chunks, valid)
+    selected = _answer_multi(
+        llm, domain, question, options, context, chunks, option_budget, valid
+    )
     return "".join(sorted(selected))
