@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from semantic_split import split_semantic
 from answer import _option_context
 from parse import chunk_text
+from retrieve import normalize_numeric_text, _tokenize
 
 
 def test_semantic_split_keeps_related_sentences_together():
@@ -46,3 +47,10 @@ def test_chunks_in_one_section_share_region():
     )
     assert len(chunks) > 1
     assert len({c["region"] for c in chunks}) == 1
+
+
+def test_numeric_normalization_handles_financial_variants():
+    assert normalize_numeric_text("1,000 万元") == "1000万元"
+    assert normalize_numeric_text("百分之十") == "10%"
+    assert "1000" in _tokenize("1,000万元")
+    assert "10%" in _tokenize("百分之十")

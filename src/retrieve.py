@@ -23,15 +23,34 @@ from parse import build_doc
 
 _STOP = set("的 了 和 与 及 或 在 是 为 对 以 等 中 上 下 之 其 该 本 第 条 款 项 者 "
             "。 ， 、 ； ： （ ） 《 》 “ ” ？ ! ? . , ; :".split())
+_CN_DIGITS = {"零": "0", "〇": "0", "一": "1", "二": "2", "两": "2", "三": "3", "四": "4", "五": "5", "六": "6", "七": "7", "八": "8", "九": "9", "十": "10"}
+
+
+def normalize_numeric_text(text: str) -> str:
+    """统一千分位、空格数字和常见中文百分比表达。"""
+    text = re.sub(r"(?<=\d)[,，](?=\d)", "", text)
+    text = re.sub(r"(?<=\d)\s+(?=\d)", "", text)
+    text = re.sub(r"(?<=\d)\s+(?=[万亿亿元元%])", "", text)
+    def cn_percent(match):
+        value = _CN_DIGITS.get(match.group(1))
+        return f"{value}%" if value is not None else match.group(0)
+    return re.sub(r"百分之([零〇一二两三四五六七八九十])", cn_percent, text)
 
 
 def _tokenize(text: str) -> list[str]:
+    text = normalize_numeric_text(text)
     if jieba is not None:
         tokens = jieba.lcut(text)
     else:
         # 中文二元词 + 数字/英文词，保证金融指标和公司名不被整句吞掉。
         tokens = re.findall(r"[A-Za-z0-9.%]+|[\u4e00-\u9fff]{2}", text)
     return [t.strip() for t in tokens if t.strip() and t not in _STOP]
+
+
+def _query_variants(query: str) -> list[str]:
+    """同一查询保留原文和数字规范化版本，增加召回鲁棒性。"""
+    normalized = normalize_numeric_text(query)
+    return [query] if normalized == query else [query, normalized]
 
 
 class _FallbackBM25:
@@ -165,14 +184,14 @@ class DocRetriever:
         财报/保险数值题优先表格块。避免额外 LLM 调用(受限流约束)。
         """
         # 选项里的数字与较长词元
-        opt_text = " ".join(options)
-        opt_nums = set(re.findall(r"\d[\d,\.%]*", opt_text))
+        opt_text = normalize_numeric_text(" ".join(options))
+        opt_nums = set(re.findall(r"\d[\d\.%]*", opt_text))
         opt_terms = set(t for t in _tokenize(opt_text) if len(t) >= 2)
         table_boost = domain in ("financial_reports", "insurance")
 
         def score(i: int) -> float:
             c = self.chunks[i]
-            txt = c["text"]
+            txt = normalize_numeric_text(c["text"])
             s = 0.0
             # 数字重叠(数值题关键)
             for n in opt_nums:
@@ -198,7 +217,9 @@ class DocRetriever:
         """
         if not self.bm25:
             return []
-        queries = [query] + [f"{query} {o}" for o in options]
+        queries = []
+        for raw_query in [query] + [f"{query} {o}" for o in options]:
+            queries.extend(_query_variants(raw_query))
 
         # 1) 按 doc 均衡:每个文档独立取候选
         n_docs = max(1, len(self.doc_ids))
