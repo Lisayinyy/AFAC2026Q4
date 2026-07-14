@@ -4,7 +4,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from semantic_split import split_semantic
-from answer import _allocate_option_budgets, _option_context, _option_has_evidence
+from answer import _allocate_option_budgets, _option_context, _option_has_evidence, _question_budget
 from parse import chunk_text
 from retrieve import normalize_numeric_text, _tokenize
 
@@ -83,3 +83,15 @@ def test_option_budgets_are_strict_and_weak_items_get_more():
     assert sum(budgets.values()) == 700
     assert all(value >= 160 for value in budgets.values())
     assert budgets["B"] > budgets["A"]
+
+
+def test_question_budget_scales_with_complexity_and_is_capped():
+    simple = _question_budget("research", "公司主营业务是什么？", {"A": "主营业务"}, ["d1"], "mcq")
+    complex_q = _question_budget(
+        "financial_reports", "两份年报比较2022、2023、2024年净利润和资产负债率，哪些不正确？",
+        {"A": "净利润20亿元", "B": "资产负债率63.5%", "C": "不得披露", "D": "同比下降"},
+        ["d1", "d2"], "multi",
+    )
+    assert simple[0] < complex_q[0]
+    assert simple[1] < complex_q[1]
+    assert complex_q[0] <= 16 and complex_q[1] <= 9000 and complex_q[2] <= 1800
