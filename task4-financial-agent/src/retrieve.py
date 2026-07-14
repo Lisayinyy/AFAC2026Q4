@@ -114,6 +114,32 @@ def _mmr_select(candidates: list[int], scores: dict[int, float], chunks: list[di
     return selected
 
 
+def _ensure_doc_coverage(candidates: list[int], selected: list[int],
+                         scores: dict[int, float], chunks: list[dict],
+                         doc_ids: list[str], limit: int) -> list[int]:
+    """在 MMR 后补齐每个引用文档的最佳证据，不突破 top-k。"""
+    selected_set = set(selected)
+    for doc_id in doc_ids:
+        if any(chunks[i].get("doc_id") == doc_id for i in selected):
+            continue
+        choices = [i for i in candidates if i not in selected_set and chunks[i].get("doc_id") == doc_id]
+        if not choices:
+            continue
+        best = max(choices, key=lambda i: scores.get(i, 0.0))
+        if len(selected) >= limit:
+            # 替换当前最低分且同文档已有多个块的项，避免丢掉其它文档。
+            replaceable = [i for i in selected if sum(chunks[j].get("doc_id") == chunks[i].get("doc_id") for j in selected) > 1]
+            if not replaceable:
+                continue
+            worst = min(replaceable, key=lambda i: scores.get(i, 0.0))
+            selected[selected.index(worst)] = best
+            selected_set.remove(worst)
+        else:
+            selected.append(best)
+        selected_set.add(best)
+    return selected[:limit]
+
+
 class DocRetriever:
     """针对单题引用的若干文档构建 BM25 索引,配合 rerank 精排。"""
 
@@ -203,7 +229,11 @@ class DocRetriever:
         fused_final = {i: 1.0 / (pos + 1) for pos, i in enumerate(balanced)}
         selected = _mmr_select(
             list(dict.fromkeys(balanced)), fused_final, self.chunks,
-            max(top_k, per_doc * n_docs), region_cap=1,
+            top_k, region_cap=1,
+        )
+        selected = _ensure_doc_coverage(
+            list(dict.fromkeys(balanced)), selected, fused_final,
+            self.chunks, self.doc_ids, top_k,
         )
         return [self.chunks[i] for i in selected]
 

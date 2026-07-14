@@ -24,7 +24,7 @@ from semantic_split import split_semantic
 CHUNK_SIZE = 1000          # 目标 chunk 字符数(中文,约等价 ~1800 英文字符)
 CHUNK_OVERLAP = 150
 MIN_CHUNK_SIZE = 180
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 
 # 标题、条款号和表格标题是金融长文档中最稳定的语义边界。这里不依赖
 # embedding/外部 API；若后续配置了语义分词模型，可以在此层替换句子边界，
@@ -136,10 +136,7 @@ def chunk_text(text: str, doc_id: str, domain: str) -> list[dict]:
     chunks: list[dict] = []
     buf = ""
     section = ""
-    region = 0
-
     def flush() -> None:
-        nonlocal buf, region
         value = buf.strip()
         if not value:
             return
@@ -150,11 +147,12 @@ def chunk_text(text: str, doc_id: str, domain: str) -> list[dict]:
             "text": value,
             "is_table": False,
             "section": section,
-            "region": region,
+            # 同一章节的多个 chunk 视为同一区域，MMR 才能避免一个章节
+            # 挤占全部召回名额；表格区域在 _chunk_tables 中单独编号。
+            "region": section or "__preamble__",
             "chunk_type": "prose",
             "char_count": len(value),
         })
-        region += 1
 
     for para in paragraphs:
         if _is_heading(para):

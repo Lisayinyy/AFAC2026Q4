@@ -5,6 +5,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from semantic_split import split_semantic
 from answer import _option_context
+from parse import chunk_text
 
 
 def test_semantic_split_keeps_related_sentences_together():
@@ -36,3 +37,12 @@ def test_option_context_extracts_evidence_sentences_only():
     assert "净利润" in result
     assert "无关背景" in result
     assert len(result) <= 80
+
+
+def test_chunks_in_one_section_share_region():
+    chunks = chunk_text(
+        "第一节 财务情况\n" + "2024年净利润增长。" * 180,
+        "demo", "financial_reports",
+    )
+    assert len(chunks) > 1
+    assert len({c["region"] for c in chunks}) == 1
