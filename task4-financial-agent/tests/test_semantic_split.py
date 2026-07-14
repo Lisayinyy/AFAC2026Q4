@@ -4,6 +4,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from semantic_split import split_semantic
+from answer import _option_context
 
 
 def test_semantic_split_keeps_related_sentences_together():
@@ -24,3 +25,14 @@ def test_semantic_split_accepts_external_similarity():
     )
     assert groups == ["甲段。乙段。", "丙段。"]
 
+
+def test_option_context_extracts_evidence_sentences_only():
+    chunks = [{
+        "doc_id": "demo", "chunk_id": 0, "region": 0, "section": "财务",
+        "is_table": False,
+        "text": "这是无关背景。2024年净利润为20亿元。后续还有无关说明。",
+    }]
+    result = _option_context(chunks, "2024年净利润为20亿元", max_chars=80)
+    assert "净利润" in result
+    assert "无关背景" in result
+    assert len(result) <= 80
