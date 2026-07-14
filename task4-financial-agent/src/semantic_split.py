@@ -9,11 +9,15 @@ from __future__ import annotations
 
 import math
 import re
-from collections import Counter
 from typing import Callable
 
 
 _SENTENCE_RE = re.compile(r"[^。！？!?；;]+[。！？!?；;]?")
+_BRIDGE_TERMS = {
+    "同比", "环比", "增长", "下降", "上升", "增加", "减少", "变化",
+    "占比", "比例", "率", "金额", "规模", "年度", "季度", "平均",
+    "净利润", "营业收入", "现金流", "资产负债", "研发投入", "分红",
+}
 
 
 def _terms(text: str) -> set[str]:
@@ -30,6 +34,21 @@ def _jaccard(left: set[str], right: set[str]) -> float:
     if not left or not right:
         return 0.0
     return len(left & right) / math.sqrt(len(left) * len(right))
+
+
+def _bridge_score(left: str, right: str) -> float:
+    """金融事实常用的跨句桥接特征，避免同一指标段落被拆散。"""
+    shared_bridge = {
+        term for term in _BRIDGE_TERMS if term in left and term in right
+    }
+    shared_numbers = set(re.findall(r"\d+(?:\.\d+)?%?", left)) & set(
+        re.findall(r"\d+(?:\.\d+)?%?", right)
+    )
+    if shared_bridge:
+        return min(0.45, 0.22 * len(shared_bridge))
+    if shared_numbers:
+        return 0.12
+    return 0.0
 
 
 def split_semantic(
@@ -51,7 +70,12 @@ def split_semantic(
     groups: list[str] = []
     current = [sentences[0]]
     for i in range(1, len(sentences)):
-        sim = similarity(sentences[i - 1], sentences[i]) if similarity else _jaccard(vectors[i - 1], vectors[i])
+        sim = (
+            similarity(sentences[i - 1], sentences[i])
+            if similarity
+            else _jaccard(vectors[i - 1], vectors[i])
+            + _bridge_score(sentences[i - 1], sentences[i])
+        )
         if len(current) >= max_sentences or sim < threshold:
             groups.append("".join(current))
             current = []
@@ -59,4 +83,3 @@ def split_semantic(
     if current:
         groups.append("".join(current))
     return groups
-
