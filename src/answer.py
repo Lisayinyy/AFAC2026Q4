@@ -58,23 +58,40 @@ def _extract_answer_letters(text: str, valid: list[str]) -> list[str]:
 
 
 def _option_context(chunks: list[dict], option: str, max_chars: int = 1800) -> str:
-    """为单个选项提取紧凑证据，减少无关区域污染。"""
+    """按句子抽取单个选项证据，保留少量邻句而不是整块灌入。"""
     terms = set(_tokenize(option)) if option else set()
     option_nums = set(re.findall(r"\d[\d,.%]*", option))
-    ranked = []
+    negations = {"不", "无", "未", "不得", "不能", "除外", "仅"}
+    ranked: list[tuple[float, dict, list[str], int]] = []
     for c in chunks:
-        text_terms = set(_tokenize(c["text"]))
-        overlap = len(terms & text_terms)
-        nums = len(option_nums & set(re.findall(r"\d[\d,.%]*", c["text"])))
-        score = overlap + nums * 2.0 + (0.3 if c.get("is_table") else 0)
-        ranked.append((score, c))
+        sentences = [s.strip() for s in re.findall(r"[^。！？!?；;]+[。！？!?；;]?", c["text"]) if s.strip()]
+        if not sentences:
+            sentences = [c["text"]]
+        for pos, sentence in enumerate(sentences):
+            text_terms = set(_tokenize(sentence))
+            overlap = len(terms & text_terms)
+            nums = len(option_nums & set(re.findall(r"\d[\d,.%]*", sentence)))
+            neg = len(negations & set(_tokenize(sentence)))
+            score = overlap + nums * 2.5 + neg * 0.35 + (0.3 if c.get("is_table") else 0)
+            if score > 0:
+                ranked.append((score, c, sentences, pos))
     ranked.sort(key=lambda x: x[0], reverse=True)
     out, used = [], 0
-    for _, c in ranked:
+    seen: set[tuple[str, int, int]] = set()
+    for _, c, sentences, pos in ranked:
         header = f"[{c['doc_id']}|{c.get('section','')}|r{c.get('region','?')}] "
-        body = c["text"]
-        if used + len(header) + len(body) > max_chars:
-            body = body[: max(0, max_chars - used - len(header))]
+        # 证据句加一个邻句，保留条件/定义，但不重复同一证据句。
+        selected = sentences[max(0, pos - 1): min(len(sentences), pos + 2)]
+        body = "".join(selected)
+        key = (c["doc_id"], c["chunk_id"], pos)
+        if key in seen:
+            continue
+        seen.add(key)
+        remaining = max_chars - used - len(header)
+        if remaining <= 0:
+            break
+        if len(body) > remaining:
+            body = body[:remaining]
         if body:
             out.append(header + body)
             used += len(header) + len(body)
