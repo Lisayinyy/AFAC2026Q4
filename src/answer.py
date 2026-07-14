@@ -128,6 +128,40 @@ def _option_has_evidence(chunks: list[dict], option: str) -> bool:
     return False
 
 
+def _option_evidence_strength(chunks: list[dict], option: str) -> float:
+    """返回 0~1 的证据强度，用于把有限字符预算给弱证据选项。"""
+    terms, numbers, negations = _evidence_signature(option)
+    best = 0.0
+    for chunk in chunks:
+        observed_terms, observed_numbers, observed_negations = _evidence_signature(chunk["text"])
+        term_hits = len(terms & observed_terms)
+        number_hits = len(numbers & observed_numbers)
+        negation_hit = bool(negations & observed_negations)
+        score = min(1.0, term_hits / 2.0) * 0.55 + min(1.0, number_hits) * 0.35 + (0.1 if negation_hit else 0)
+        best = max(best, score)
+    return best
+
+
+def _allocate_option_budgets(options: dict, chunks: list[dict], total: int,
+                             minimum: int = 160) -> dict[str, int]:
+    """严格分配选项证据预算，弱证据项优先，不超过 total。"""
+    keys = list(options)
+    if not keys or total <= 0:
+        return {key: 0 for key in keys}
+    minimum = min(minimum, total // len(keys))
+    remaining = total - minimum * len(keys)
+    weights = {key: 1.0 + (1.0 - _option_evidence_strength(chunks, options[key])) for key in keys}
+    weight_sum = sum(weights.values()) or 1.0
+    budgets = {key: minimum + int(remaining * weights[key] / weight_sum) for key in keys}
+    # 整除余数按选项顺序补齐，确保预算精确且稳定。
+    while sum(budgets.values()) < total:
+        for key in keys:
+            if sum(budgets.values()) >= total:
+                break
+            budgets[key] += 1
+    return budgets
+
+
 def _extract_multi_structured(text: str, valid: list[str]) -> list[str]:
     """优先读取逐选项成立/不成立，再以最终答案行作兜底。"""
     decisions: dict[str, bool] = {}
@@ -178,9 +212,9 @@ def _answer_multi(llm: LLMClient, domain: str, question: str,
     letters = "/".join(valid)
     sys = ("你是严谨的金融文档核查专家,只依据资料逐项核对。"
            + _DOMAIN_HINT.get(domain, ""))
-    per_option_budget = max(600, option_budget // max(1, len(options)))
+    option_budgets = _allocate_option_budgets(options, chunks, option_budget)
     evidence = "\n\n".join(
-        f"选项 {key} 相关证据:\n{_option_context(chunks, value, per_option_budget)}"
+        f"选项 {key} 相关证据:\n{_option_context(chunks, value, option_budgets[key])}"
         for key, value in options.items()
     )
     user = (
