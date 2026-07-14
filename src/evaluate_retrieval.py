@@ -38,7 +38,7 @@ def load_questions(domains: list[str] | None) -> list[dict]:
     return out
 
 
-def evaluate(limit: int = 0, domains: list[str] | None = None) -> dict:
+def evaluate(limit: int = 0, domains: list[str] | None = None, top_k: int = 12) -> dict:
     questions = load_questions(domains)
     if limit:
         questions = questions[:limit]
@@ -48,11 +48,12 @@ def evaluate(limit: int = 0, domains: list[str] | None = None) -> dict:
     doc_total = 0
     recalled_chars = 0
     source_chars = 0
+    by_domain: dict[str, dict[str, int]] = {}
     for q in questions:
         retriever = DocRetriever(q["domain"], q["doc_ids"])
         chunks = retriever.retrieve(
             q["question"], list(q["options"].values()),
-            pool=60, top_k=12, domain=q["domain"],
+            pool=60, top_k=top_k, domain=q["domain"],
         )
         recalled_chars += len(build_context(chunks, max_chars=10**9))
         source_chars += sum(len(c["text"]) for c in retriever.chunks)
@@ -62,9 +63,12 @@ def evaluate(limit: int = 0, domains: list[str] | None = None) -> dict:
         chunk_terms = [_evidence_terms(c["text"]) for c in chunks]
         for option in q["options"].values():
             option_total += 1
+            stats = by_domain.setdefault(q["domain"], {"hits": 0, "total": 0})
+            stats["total"] += 1
             terms = _evidence_terms(option)
             if terms and any(terms & cterms for cterms in chunk_terms):
                 option_hits += 1
+                stats["hits"] += 1
     return {
         "questions": len(questions),
         "option_coverage": round(option_hits / option_total, 4) if option_total else 0,
@@ -72,6 +76,13 @@ def evaluate(limit: int = 0, domains: list[str] | None = None) -> dict:
         "compression": round(recalled_chars / source_chars, 4) if source_chars else 0,
         "option_hits": option_hits,
         "option_total": option_total,
+        "by_domain": {
+            domain: {
+                **stats,
+                "coverage": round(stats["hits"] / stats["total"], 4) if stats["total"] else 0,
+            }
+            for domain, stats in sorted(by_domain.items())
+        },
     }
 
 
@@ -79,10 +90,10 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--domains", nargs="*")
+    ap.add_argument("--top-k", type=int, default=12)
     args = ap.parse_args()
-    print(json.dumps(evaluate(args.limit, args.domains), ensure_ascii=False, indent=2))
+    print(json.dumps(evaluate(args.limit, args.domains, args.top_k), ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
     main()
-

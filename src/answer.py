@@ -171,6 +171,17 @@ def answer_question(llm: LLMClient, q: dict) -> str:
         top_k, max_chars = 12, 9000
     chunks = retriever.retrieve(question, list(options.values()),
                                 pool=60, top_k=top_k, domain=domain)
+    if fmt == "multi":
+        # 每个选项补 2 个窄召回块；共享块负责跨文档关系，窄块负责数字/否定词。
+        seen = {(c["doc_id"], c["chunk_id"]) for c in chunks}
+        for option in options.values():
+            for extra in retriever.retrieve_option_evidence(
+                question, option, top_k=2, domain=domain
+            ):
+                key = (extra["doc_id"], extra["chunk_id"])
+                if key not in seen:
+                    chunks.append(extra)
+                    seen.add(key)
     context = build_context(chunks, max_chars=max_chars)
 
     if fmt in ("mcq", "tf"):

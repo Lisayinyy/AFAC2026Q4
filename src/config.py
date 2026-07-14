@@ -9,12 +9,20 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
-from openai import OpenAI
+try:
+    from dotenv import load_dotenv
+except ImportError:  # 离线评估不需要 dotenv
+    def load_dotenv(*args, **kwargs):
+        return False
 
 # ---- 路径 ----
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DATA_ROOT = PROJECT_ROOT.parent / "public_dataset_upload"
+_DATA_CANDIDATES = [
+    Path(os.environ["AFAC_DATA_ROOT"]) if os.environ.get("AFAC_DATA_ROOT") else None,
+    PROJECT_ROOT.parent / "public_dataset_upload",
+    Path.home() / "public_dataset_upload",
+]
+DATA_ROOT = next((p for p in _DATA_CANDIDATES if p and p.exists()), _DATA_CANDIDATES[1])
 RAW_ROOT = DATA_ROOT / "raw"
 QUESTIONS_ROOT = DATA_ROOT / "questions" / "group_a"
 CACHE_ROOT = PROJECT_ROOT / "cache"          # 解析后的分块缓存
@@ -98,6 +106,10 @@ class LLMClient:
     def __init__(self, meter: TokenMeter) -> None:
         if not _API_KEY or not _BASE_URL:
             raise RuntimeError("缺少 ARK_API_KEY / OPENAI_BASE_URL,请检查 .env")
+        try:
+            from openai import OpenAI
+        except ImportError as exc:
+            raise RuntimeError("正式答题需要安装 openai；离线评估无需该依赖") from exc
         # 每次请求 120s 超时 + 最多重试 2 次(思考模式响应较慢)
         self.client = OpenAI(
             api_key=_API_KEY, base_url=_BASE_URL, timeout=120.0, max_retries=2
