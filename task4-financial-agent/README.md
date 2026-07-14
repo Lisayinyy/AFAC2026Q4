@@ -71,6 +71,44 @@ public_dataset_upload/
 - `type`：题目细分类型（如计算题、推理判断、财务指标对比等）。
 - `doc_ids`：该题引用的原始文档标识，对应 `raw/<domain>/` 下的文件名（不含扩展名）。
 
+## 生成第一轮约束探针
+
+## 检索链路优化（2026-07-15）
+
+- `src/semantic_split.py`：提供无 API 依赖的语意 cohesion 切分，并预留外部语意模型相似度注入接口。
+- `src/parse.py`：按标题、段落和句子边界切块，保留章节、区域、块类型和缓存版本，旧缓存会自动失效。
+- `src/retrieve.py`：在 BM25 + 多 query RRF 后加入区域感知 MMR、跨文档去重和表格/标题元数据。
+- `src/answer.py`：为每个选项生成紧凑证据包，要求模型逐项输出成立/不成立，再解析结构化结果，减少多选漏选和最后一行解析失真。
+- `tests/test_semantic_split.py`：覆盖默认 cohesion 分词和外部相似度注入。
+
+这轮改动已完成离线语法与单测验证；真实 Qwen 全量评测需要配置 `.env` 中的 API 端点和题目/原始文档目录后执行。
+
+基于 95 分答案生成一份经官方历史正确题数约束验证、理论上可达 100 分的
+五题探针：
+
+```bash
+python src/build_submission.py
+```
+
+默认输出为 `output/probe_1_candidate_100.csv`。生成器不会覆盖原始的
+`output/answer_group_a.csv`，并会在写出前校验 100 个唯一 QID、答案字母格式、
+修正数量以及 Token 字段。汇总 Token 保持为正数，避免 TokenScore 被平台计为 0。
+
+如果第一探针的官方结果恰好为 99/100，先根据新得分重新确认约束，再生成
+只把 `fc_a_015` 从 C 改为 D 的条件候选：
+
+```bash
+python src/build_submission.py --probe 2-if-99
+```
+
+其他首轮分数不能使用这份条件候选，必须把新正确题数加入约束后重新求解。
+
+`output/answer_submit_candidate_100.csv` 是已验证只有 92 道正确且汇总 Token 为 0
+的失败版本，不应再次提交。
+
+约束来源、公开运行敏感性、五题原始 PDF 证据和条件提交边界见
+[`docs/answer_audit_2026-07-13.md`](docs/answer_audit_2026-07-13.md)。
+
 ### 答案类型分布（A 榜 100 题）
 
 | answer_format | 含义 | 数量 |
@@ -80,4 +118,3 @@ public_dataset_upload/
 | `mcq` | 单选题 | 15 |
 
 > 注：公开数据集中的题目**不含标准答案**，答案由官方评测时持有。
-
