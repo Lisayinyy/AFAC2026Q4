@@ -4,7 +4,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from semantic_split import split_semantic
-from answer import _option_context
+from answer import _option_context, _option_has_evidence
 from parse import chunk_text
 from retrieve import normalize_numeric_text, _tokenize
 
@@ -54,3 +54,20 @@ def test_numeric_normalization_handles_financial_variants():
     assert normalize_numeric_text("百分之十") == "10%"
     assert "1000" in _tokenize("1,000万元")
     assert "10%" in _tokenize("百分之十")
+
+
+def test_generic_word_does_not_suppress_narrow_retrieval():
+    chunks = [{
+        "doc_id": "demo", "chunk_id": 0, "region": 0, "section": "",
+        "is_table": False, "text": "公司情况和相关信息说明。",
+    }]
+    assert not _option_has_evidence(chunks, "公司相关情况中的净利润20亿元")
+
+
+def test_two_indicators_or_indicator_number_count_as_evidence():
+    chunks = [{
+        "doc_id": "demo", "chunk_id": 0, "region": 0, "section": "",
+        "is_table": False, "text": "净利润为20亿元，营业收入同比增长。",
+    }]
+    assert _option_has_evidence(chunks, "净利润20亿元")
+    assert _option_has_evidence(chunks, "净利润和营业收入增长")

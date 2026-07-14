@@ -11,7 +11,21 @@ from __future__ import annotations
 import re
 
 from config import LLMClient
-from retrieve import DocRetriever, _tokenize, build_context
+from retrieve import DocRetriever, _tokenize, build_context, normalize_numeric_text
+
+_GENERIC_TERMS = {
+    "公司", "数据", "情况", "相关", "内容", "方面", "信息", "主要", "其中",
+    "说明", "报告", "文件", "项目", "业务", "产品", "指标", "部分", "方式",
+}
+_NEGATION_TERMS = {"不", "无", "未", "不得", "不能", "除外", "仅"}
+
+
+def _evidence_signature(text: str) -> tuple[set[str], set[str], set[str]]:
+    normalized = normalize_numeric_text(text)
+    terms = {t for t in _tokenize(normalized) if t not in _GENERIC_TERMS and len(t) >= 2}
+    numbers = set(re.findall(r"\d[\d.]*%?", normalized))
+    negations = terms & _NEGATION_TERMS
+    return terms, numbers, negations
 
 # 分领域作答侧重
 _DOMAIN_HINT = {
@@ -59,19 +73,19 @@ def _extract_answer_letters(text: str, valid: list[str]) -> list[str]:
 
 def _option_context(chunks: list[dict], option: str, max_chars: int = 1800) -> str:
     """按句子抽取单个选项证据，保留少量邻句而不是整块灌入。"""
-    terms = set(_tokenize(option)) if option else set()
-    option_nums = set(re.findall(r"\d[\d,.%]*", option))
-    negations = {"不", "无", "未", "不得", "不能", "除外", "仅"}
+    terms, option_nums, _ = _evidence_signature(option)
+    negations = _NEGATION_TERMS
     ranked: list[tuple[float, dict, list[str], int]] = []
     for c in chunks:
         sentences = [s.strip() for s in re.findall(r"[^。！？!?；;]+[。！？!?；;]?", c["text"]) if s.strip()]
         if not sentences:
             sentences = [c["text"]]
         for pos, sentence in enumerate(sentences):
-            text_terms = set(_tokenize(sentence))
+            text_terms, _, _ = _evidence_signature(sentence)
             overlap = len(terms & text_terms)
-            nums = len(option_nums & set(re.findall(r"\d[\d,.%]*", sentence)))
-            neg = len(negations & set(_tokenize(sentence)))
+            normalized_sentence = normalize_numeric_text(sentence)
+            nums = len(option_nums & set(re.findall(r"\d[\d.]*%?", normalized_sentence)))
+            neg = len(negations & set(_tokenize(normalized_sentence)))
             score = overlap + nums * 2.5 + neg * 0.35 + (0.3 if c.get("is_table") else 0)
             if score > 0:
                 ranked.append((score, c, sentences, pos))
@@ -101,14 +115,15 @@ def _option_context(chunks: list[dict], option: str, max_chars: int = 1800) -> s
 
 
 def _option_has_evidence(chunks: list[dict], option: str) -> bool:
-    terms = set(_tokenize(option)) if option else set()
-    terms.update(re.findall(r"\d[\d,.%]*", option))
-    if not terms:
+    terms, numbers, negations = _evidence_signature(option)
+    if not terms and not numbers:
         return False
     for chunk in chunks:
-        observed = set(_tokenize(chunk["text"]))
-        observed.update(re.findall(r"\d[\d,.%]*", chunk["text"]))
-        if terms & observed:
+        observed_terms, observed_numbers, observed_negations = _evidence_signature(chunk["text"])
+        term_hits = len(terms & observed_terms)
+        number_hits = len(numbers & observed_numbers)
+        negation_hit = bool(negations & observed_negations)
+        if term_hits >= 2 or (term_hits >= 1 and number_hits >= 1) or (term_hits >= 1 and negation_hit):
             return True
     return False
 
