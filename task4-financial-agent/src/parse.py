@@ -19,9 +19,23 @@ import fitz  # PyMuPDF
 from bs4 import BeautifulSoup
 
 from config import CACHE_ROOT, DOMAIN_DIRS
+from semantic_split import split_semantic
 
 CHUNK_SIZE = 1000          # 目标 chunk 字符数(中文,约等价 ~1800 英文字符)
 CHUNK_OVERLAP = 150
+MIN_CHUNK_SIZE = 180
+CACHE_VERSION = 2
+
+# 标题、条款号和表格标题是金融长文档中最稳定的语义边界。这里不依赖
+# embedding/外部 API；若后续配置了语义分词模型，可以在此层替换句子边界，
+# 而不会影响下游检索接口。
+_HEADING_RE = re.compile(
+    r"^(?:第[一二三四五六七八九十百千万0-9]+[章节条款]|"
+    r"[一二三四五六七八九十]+、|[0-9]{1,2}(?:\.[0-9]+)*[、.]|"
+    r"（[一二三四五六七八九十0-9]+）|[A-Z][、.]|"
+    r"(?:目录|摘要|风险提示|重大事项|发行条款|财务情况|附录|定义与解释).{0,40})"
+)
+_SENTENCE_RE = re.compile(r"[^。！？!?；;]+[。！？!?；;]?")
 
 
 def resolve_doc_path(domain: str, doc_id: str) -> Path | None:
@@ -101,29 +115,68 @@ def _clean(text: str) -> str:
     return text.strip()
 
 
+def _is_heading(para: str) -> bool:
+    para = para.strip()
+    return bool(para and len(para) <= 100 and _HEADING_RE.match(para))
+
+
+def _split_sentences(para: str) -> list[str]:
+    return split_semantic(para, max_sentences=8, threshold=0.08)
+
+
 def chunk_text(text: str, doc_id: str, domain: str) -> list[dict]:
-    """按段落聚合到 ~CHUNK_SIZE 字符,带重叠。"""
+    """按标题/段落/句子三级边界切块，并保存区域元数据。
+
+    相比单纯按字符聚合，这个实现尽量不把标题和其后的事实拆开，也避免
+    在数字表格行中间截断。chunk_id 仍保持整数，兼容已有缓存和检索代码。
+    """
     text = _clean(text)
     paragraphs = [p.strip() for p in text.split("\n") if p.strip()]
 
-    chunks: list[str] = []
+    chunks: list[dict] = []
     buf = ""
-    for para in paragraphs:
-        if len(buf) + len(para) + 1 <= CHUNK_SIZE:
-            buf += para + "\n"
-        else:
-            if buf:
-                chunks.append(buf.strip())
-            tail = buf[-CHUNK_OVERLAP:] if buf else ""
-            buf = tail + para + "\n"
-    if buf.strip():
-        chunks.append(buf.strip())
+    section = ""
+    region = 0
 
-    return [
-        {"doc_id": doc_id, "domain": domain, "chunk_id": i,
-         "text": c, "is_table": False}
-        for i, c in enumerate(chunks)
-    ]
+    def flush() -> None:
+        nonlocal buf, region
+        value = buf.strip()
+        if not value:
+            return
+        chunks.append({
+            "doc_id": doc_id,
+            "domain": domain,
+            "chunk_id": len(chunks),
+            "text": value,
+            "is_table": False,
+            "section": section,
+            "region": region,
+            "chunk_type": "prose",
+            "char_count": len(value),
+        })
+        region += 1
+
+    for para in paragraphs:
+        if _is_heading(para):
+            flush()
+            section = para
+            buf = para + "\n"
+            continue
+        for sentence in _split_sentences(para):
+            if len(buf) + len(sentence) + 1 <= CHUNK_SIZE:
+                buf += sentence + "\n"
+                continue
+            # 只有当当前块已经有足够内容时才使用 overlap；短块直接拼接，
+            # 避免重复标题/数字导致 BM25 权重异常。
+            if len(buf.strip()) >= MIN_CHUNK_SIZE:
+                old = buf
+                flush()
+                tail = old[-CHUNK_OVERLAP:]
+                buf = (section + "\n" if section else "") + tail + sentence + "\n"
+            else:
+                buf += sentence + "\n"
+    flush()
+    return chunks
 
 
 def _chunk_tables(tables_md: list[str], doc_id: str, domain: str,
@@ -146,7 +199,9 @@ def _chunk_tables(tables_md: list[str], doc_id: str, domain: str,
                 pieces.append(buf.strip())
         for p in pieces:
             out.append({"doc_id": doc_id, "domain": domain, "chunk_id": cid,
-                        "text": "[表格]\n" + p, "is_table": True})
+                        "text": "[表格]\n" + p, "is_table": True,
+                        "section": "table", "region": cid,
+                        "chunk_type": "table", "char_count": len(p) + 5})
             cid += 1
     return out
 
@@ -157,7 +212,9 @@ def build_doc(domain: str, doc_id: str, use_cache: bool = True) -> list[dict]:
     cache_file = CACHE_ROOT / f"{domain}__{doc_id}.json"
 
     if use_cache and cache_file.exists():
-        return json.loads(cache_file.read_text(encoding="utf-8"))
+        cached = json.loads(cache_file.read_text(encoding="utf-8"))
+        if isinstance(cached, dict) and cached.get("version") == CACHE_VERSION:
+            return cached.get("chunks", [])
 
     path = resolve_doc_path(domain, doc_id)
     if path is None:
@@ -175,7 +232,8 @@ def build_doc(domain: str, doc_id: str, use_cache: bool = True) -> list[dict]:
         chunks = chunk_text(_extract_text_file(path), doc_id, domain)
 
     cache_file.write_text(
-        json.dumps(chunks, ensure_ascii=False), encoding="utf-8"
+        json.dumps({"version": CACHE_VERSION, "chunks": chunks}, ensure_ascii=False),
+        encoding="utf-8",
     )
     return chunks
 

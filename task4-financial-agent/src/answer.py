@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 
 from config import LLMClient
-from retrieve import DocRetriever, build_context
+from retrieve import DocRetriever, _tokenize, build_context
 
 # 分领域作答侧重
 _DOMAIN_HINT = {
@@ -57,6 +57,49 @@ def _extract_answer_letters(text: str, valid: list[str]) -> list[str]:
     return out
 
 
+def _option_context(chunks: list[dict], option: str, max_chars: int = 1800) -> str:
+    """为单个选项提取紧凑证据，减少无关区域污染。"""
+    terms = set(_tokenize(option)) if option else set()
+    option_nums = set(re.findall(r"\d[\d,.%]*", option))
+    ranked = []
+    for c in chunks:
+        text_terms = set(_tokenize(c["text"]))
+        overlap = len(terms & text_terms)
+        nums = len(option_nums & set(re.findall(r"\d[\d,.%]*", c["text"])))
+        score = overlap + nums * 2.0 + (0.3 if c.get("is_table") else 0)
+        ranked.append((score, c))
+    ranked.sort(key=lambda x: x[0], reverse=True)
+    out, used = [], 0
+    for _, c in ranked:
+        header = f"[{c['doc_id']}|{c.get('section','')}|r{c.get('region','?')}] "
+        body = c["text"]
+        if used + len(header) + len(body) > max_chars:
+            body = body[: max(0, max_chars - used - len(header))]
+        if body:
+            out.append(header + body)
+            used += len(header) + len(body)
+        if used >= max_chars:
+            break
+    return "\n".join(out)
+
+
+def _extract_multi_structured(text: str, valid: list[str]) -> list[str]:
+    """优先读取逐选项成立/不成立，再以最终答案行作兜底。"""
+    decisions: dict[str, bool] = {}
+    for line in text.splitlines():
+        m = re.match(r"\s*([A-D])\s*[:：-]\s*(.+)", line, re.I)
+        if not m or m.group(1).upper() not in valid:
+            continue
+        tail = m.group(2)
+        if re.search(r"不成立|错误|不正确|否|false|错", tail, re.I):
+            decisions[m.group(1).upper()] = False
+        elif re.search(r"成立|正确|是|true|对", tail, re.I):
+            decisions[m.group(1).upper()] = True
+    if decisions:
+        return [c for c in valid if decisions.get(c) is True]
+    return _extract_answer_letters(text, valid)
+
+
 def _answer_single(llm: LLMClient, domain: str, question: str, options: dict,
                    context: str, valid: list[str]) -> str:
     """单选/判断:直接选一个;找不到证据也要给最可能项,不默认 A。"""
@@ -78,7 +121,7 @@ def _answer_single(llm: LLMClient, domain: str, question: str, options: dict,
 
 
 def _answer_multi(llm: LLMClient, domain: str, question: str,
-                  options: dict, context: str,
+                  options: dict, context: str, chunks: list[dict],
                   valid: list[str]) -> list[str]:
     """多选:单次调用内逐项核对(context 只发一次,token 约为逐选项判定的 1/4)。
 
@@ -89,14 +132,17 @@ def _answer_multi(llm: LLMClient, domain: str, question: str,
     letters = "/".join(valid)
     sys = ("你是严谨的金融文档核查专家,只依据资料逐项核对。"
            + _DOMAIN_HINT.get(domain, ""))
+    evidence = "\n\n".join(
+        f"选项 {key} 相关证据:\n{_option_context(chunks, value)}"
+        for key, value in options.items()
+    )
     user = (
-        f"资料:\n{context}\n\n问题:{question}\n\n选项:\n{opt_text}\n\n"
+        f"共享资料:\n{context}\n\n选项级证据:\n{evidence}\n\n"
+        f"问题:{question}\n\n选项:\n{opt_text}\n\n"
         "这是多选题(正确选项通常为 2~3 个,少数为 1 或 4 个)。请【逐个选项】独立核对:\n"
-        "对每个选项,先写字母,再给资料依据,然后判定『成立』或『不成立』。\n"
-        "判定标准(倾向收录、减少漏选):\n"
-        "- 资料支持、与之一致、或能提供合理依据 → 判『成立』;\n"
-        "- 仅当资料【明确矛盾】或有确凿错误(数值/日期/比例/定义不符)→ 判『不成立』;\n"
-        "- 证据支持力度中等时倾向『成立』;不要只选 1 个就收手,逐项都要认真核对。\n"
+        "每行必须使用格式『A: 成立』或『A: 不成立』，不得省略任何选项。\n"
+        "资料支持且没有明确冲突才成立；题干中的‘均/全部/必须/不超过’等全称词必须逐字验证。\n"
+        "如果证据不足，标记为『不成立』，不要用常识补全。\n"
         f"全部核对完后,最后一行只写:『答案:』后接所有成立的字母(如 ABD),"
         f"合法范围 {letters};无成立项写『答案:无』。"
     )
@@ -104,7 +150,7 @@ def _answer_multi(llm: LLMClient, domain: str, question: str,
         [{"role": "system", "content": sys}, {"role": "user", "content": user}],
         max_tokens=1600, thinking=False,
     )
-    got = _extract_answer_letters(out, valid)
+    got = _extract_multi_structured(out, valid)
     return got if got else [valid[0]]
 
 
@@ -118,12 +164,11 @@ def answer_question(llm: LLMClient, q: dict) -> str:
     valid = list(options.keys())
 
     retriever = DocRetriever(domain, doc_ids, llm=llm)
-    # multi 已改单次调用(每题仅 ~16k token)。实测中等上下文优于超大上下文
-    # (过大会引入噪声、稀释关键证据):财报略大,其余适中。
+    # 多选题额外生成选项级紧凑证据；共享上下文仍保留跨文档关系。
     if domain == "financial_reports":
-        top_k, max_chars = 16, 15000
+        top_k, max_chars = 14, 11000
     else:
-        top_k, max_chars = 14, 12000
+        top_k, max_chars = 12, 9000
     chunks = retriever.retrieve(question, list(options.values()),
                                 pool=60, top_k=top_k, domain=domain)
     context = build_context(chunks, max_chars=max_chars)
@@ -133,5 +178,5 @@ def answer_question(llm: LLMClient, q: dict) -> str:
 
     # multi:单次调用内逐项核对(实测与逐选项独立判定准确率相当甚至更高,
     # 且 token 约为其 1/3~1/4)。context 大小按领域控制。
-    selected = _answer_multi(llm, domain, question, options, context, valid)
+    selected = _answer_multi(llm, domain, question, options, context, chunks, valid)
     return "".join(sorted(selected))
