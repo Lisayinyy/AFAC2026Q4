@@ -4,7 +4,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from semantic_split import split_semantic
-from answer import _option_context, _option_has_evidence
+from answer import _allocate_option_budgets, _option_context, _option_has_evidence
 from parse import chunk_text
 from retrieve import normalize_numeric_text, _tokenize
 
@@ -71,3 +71,15 @@ def test_two_indicators_or_indicator_number_count_as_evidence():
     }]
     assert _option_has_evidence(chunks, "净利润20亿元")
     assert _option_has_evidence(chunks, "净利润和营业收入增长")
+
+
+def test_option_budgets_are_strict_and_weak_items_get_more():
+    chunks = [{
+        "doc_id": "demo", "chunk_id": 0, "region": 0, "section": "",
+        "is_table": False, "text": "净利润为20亿元，营业收入同比增长。",
+    }]
+    options = {"A": "净利润20亿元", "B": "资产负债率66.15%"}
+    budgets = _allocate_option_budgets(options, chunks, total=700, minimum=160)
+    assert sum(budgets.values()) == 700
+    assert all(value >= 160 for value in budgets.values())
+    assert budgets["B"] > budgets["A"]
