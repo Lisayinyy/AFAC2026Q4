@@ -10,8 +10,14 @@ from __future__ import annotations
 
 import re
 
-import jieba
-from rank_bm25 import BM25Okapi
+try:  # 可选依赖：离线评估和无模型运行不应被阻塞
+    import jieba
+except ImportError:  # pragma: no cover - 仅在精简环境触发
+    jieba = None
+try:
+    from rank_bm25 import BM25Okapi as _BM25Okapi
+except ImportError:  # pragma: no cover
+    _BM25Okapi = None
 
 from parse import build_doc
 
@@ -20,8 +26,43 @@ _STOP = set("的 了 和 与 及 或 在 是 为 对 以 等 中 上 下 之 其
 
 
 def _tokenize(text: str) -> list[str]:
-    tokens = jieba.lcut(text)
+    if jieba is not None:
+        tokens = jieba.lcut(text)
+    else:
+        # 中文二元词 + 数字/英文词，保证金融指标和公司名不被整句吞掉。
+        tokens = re.findall(r"[A-Za-z0-9.%]+|[\u4e00-\u9fff]{2}", text)
     return [t.strip() for t in tokens if t.strip() and t not in _STOP]
+
+
+class _FallbackBM25:
+    """无 rank_bm25 时的确定性 BM25-lite，参数与标准实现同量纲。"""
+    def __init__(self, corpus: list[list[str]]) -> None:
+        import math
+        self.corpus = corpus
+        self.avgdl = sum(map(len, corpus)) / max(1, len(corpus))
+        df: dict[str, int] = {}
+        for row in corpus:
+            for term in set(row):
+                df[term] = df.get(term, 0) + 1
+        n = len(corpus)
+        self.idf = {t: math.log(1 + (n - d + 0.5) / (d + 0.5)) for t, d in df.items()}
+
+    def get_scores(self, query: list[str]) -> list[float]:
+        scores = []
+        q = set(query)
+        for row in self.corpus:
+            counts: dict[str, int] = {}
+            for term in row:
+                counts[term] = counts.get(term, 0) + 1
+            dl = len(row)
+            score = 0.0
+            for term in q:
+                if term not in counts:
+                    continue
+                tf = counts[term]
+                score += self.idf.get(term, 0.0) * (tf * 2.2) / (tf + 1.2 * (0.7 + 0.3 * dl / max(1, self.avgdl)))
+            scores.append(score)
+        return scores
 
 
 def _rrf(rank_lists: list[list[int]], k: int = 60) -> dict[int, float]:
@@ -83,7 +124,8 @@ class DocRetriever:
         for did in doc_ids:
             self.chunks.extend(build_doc(domain, did))
         self._corpus_tokens = [_tokenize(c["text"]) for c in self.chunks]
-        self.bm25 = BM25Okapi(self._corpus_tokens) if self.chunks else None
+        engine = _BM25Okapi or _FallbackBM25
+        self.bm25 = engine(self._corpus_tokens) if self.chunks else None
 
     def _bm25_rank(self, query: str) -> list[int]:
         scores = self.bm25.get_scores(_tokenize(query))
@@ -164,6 +206,18 @@ class DocRetriever:
             max(top_k, per_doc * n_docs), region_cap=1,
         )
         return [self.chunks[i] for i in selected]
+
+    def retrieve_option_evidence(self, question: str, option: str,
+                                 *, top_k: int = 3, domain: str = "") -> list[dict]:
+        """单个选项的窄召回。
+
+        共享召回解决跨文档关系，窄召回解决某个选项的数字/否定词被其它
+        选项挤掉的问题。由于复用同一个 BM25 索引，不增加模型 Token。
+        """
+        return self.retrieve(
+            f"{question} {option}", [option], pool=24,
+            top_k=top_k, domain=domain,
+        )
 
 
 def build_context(chunks: list[dict], max_chars: int = 10000) -> str:
