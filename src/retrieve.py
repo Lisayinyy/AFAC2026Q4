@@ -60,6 +60,23 @@ class DocRetriever:
         opt_text = " ".join(options)
         opt_nums = set(re.findall(r"\d[\d,\.%]*", opt_text))
         opt_terms = set(t for t in _tokenize(opt_text) if len(t) >= 2)
+        # 题干常用中文引号标出真正的检索主题（如“施救费用”、
+        # “犹豫期”）。精确短语的区分度远高于“产品/条款/正确”等通用词。
+        anchor_phrases = {
+            x.strip()
+            for x in re.findall(r"[“\"]([^”\"]{2,24})[”\"]", opt_text)
+            if x.strip()
+        }
+        generic_ngrams = {
+            "以下说法", "下列说法", "以下哪些", "正确的是",
+            "文档内容", "条款规定", "以下描述", "相关财务",
+        }
+        # 四字连续片段比 jieba 单词更能保留指标语义，例如
+        # “研发投入占营业收入比例”。
+        char_ngrams: set[str] = set()
+        for span in re.findall(r"[一-鿿]{4,}", opt_text):
+            char_ngrams.update(span[i:i + 4] for i in range(len(span) - 3))
+        char_ngrams -= generic_ngrams
         table_boost = domain in ("financial_reports", "insurance")
 
         def score(i: int) -> float:
@@ -73,13 +90,24 @@ class DocRetriever:
             # 词元重叠
             toks = set(_tokenize(txt))
             s += len(opt_terms & toks) * 0.5
+            # 长词元和题干引号短语作为主题锚点。这能把表格中一个
+            # 数字巧合命中的片段，排在真正讨论目标条款的片段之后。
+            s += sum(1.5 for term in opt_terms if len(term) >= 4 and term in txt)
+            s += sum(5.0 for phrase in anchor_phrases if phrase in txt)
+            s += min(6.0, sum(0.35 for gram in char_ngrams if gram in txt))
             # 表格优先
             if table_boost and c.get("is_table"):
                 s += 2.0
             return s
 
-        # 稳定排序:先按本地分,同分保持 BM25 原序
-        return sorted(cand, key=lambda i: score(i), reverse=True)
+        # 保留一部分 BM25/RRF 原始名次先验，防止“年份数字巧合”
+        # 将真正命中完整指标短语的第 1-2 名候选挤出。
+        prior = {idx: pos for pos, idx in enumerate(cand)}
+        return sorted(
+            cand,
+            key=lambda i: score(i) + 4.0 / (1.0 + prior[i] * 0.35),
+            reverse=True,
+        )
 
     def retrieve(self, query: str, options: list[str],
                  pool: int = 20, top_k: int = 8, domain: str = "") -> list[dict]:
@@ -118,6 +146,100 @@ class DocRetriever:
                 balanced = [balanced[o] for o in order]
 
         return [self.chunks[i] for i in balanced[: max(top_k, per_doc * n_docs)]]
+
+    def retrieve_for_option(
+        self,
+        queries: list[str],
+        option_text: str,
+        *,
+        pool: int = 40,
+        top_k: int = 5,
+        domain: str = "",
+        use_rerank: bool = False,
+        prefer_doc_balance: bool = False,
+    ) -> list[dict]:
+        """为单个选项检索证据，保留跨文档覆盖。
+
+        与 :meth:`retrieve` 的区别是这里不把四个选项混在一起打分。调用方可以
+        传入 Agent 规划阶段生成的多个事实查询，每个文档先独立召回，再统一精排。
+        这让最终上下文天然形成 ``option -> evidence[]`` 的证据矩阵。
+        """
+        if not self.bm25:
+            return []
+
+        clean_queries = [q.strip() for q in queries if q and q.strip()]
+        if not clean_queries:
+            clean_queries = [option_text]
+
+        n_docs = max(1, len(self.doc_ids))
+        # 每份文档先产生一个保底候选，其余名额由所有文档按选项相关度竞争。
+        # 这比平均配额更适合“多个引用文档、但某个选项只对应其中一份”的题目。
+        per_doc_depth = max(2, (top_k + n_docs - 1) // n_docs)
+        per_doc_candidates: list[list[int]] = []
+
+        for did in self.doc_ids:
+            doc_idx = [i for i, c in enumerate(self.chunks) if c["doc_id"] == did]
+            if not doc_idx:
+                continue
+            idx_set = set(doc_idx)
+            rank_lists = []
+            for query in clean_queries:
+                ranks = [i for i in self._bm25_rank(query) if i in idx_set][:pool]
+                rank_lists.append(ranks)
+            fused = _rrf(rank_lists)
+            cand = sorted(fused, key=lambda i: fused[i], reverse=True)[:pool]
+            reranked = self._local_rerank(cand, [option_text], domain)
+            # 调用方把最精确的指标/条款查询放在首位。保留其 BM25
+            # 第一名，再用多特征重排补充，避免数字巧合将它挤出。
+            anchor = rank_lists[0][0] if rank_lists and rank_lists[0] else None
+            cand = ([anchor] if anchor is not None else []) + [
+                i for i in reranked if i != anchor
+            ]
+            cand = cand[:per_doc_depth]
+            per_doc_candidates.append(cand)
+
+        # 真正的跨文档比较需要每份材料都有足够证据；而一个
+        # 选项只对应一份产品条款时，仍保留“每文档1块+全局竞争”。
+        keep_per_doc = max(1, top_k // n_docs) if prefer_doc_balance else 1
+        balanced: list[int] = [
+            idx
+            for cand in per_doc_candidates
+            for idx in cand[:keep_per_doc]
+        ][:top_k]
+
+        # 剩余位置按所有查询的全局 RRF + 选项数字/关键词重排竞争。
+        global_rank_lists = [self._bm25_rank(q)[:pool] for q in clean_queries]
+        global_scores = _rrf(global_rank_lists)
+        global_ranked = sorted(global_scores, key=lambda i: global_scores[i], reverse=True)
+        seen = set(balanced)
+        global_ranked = self._local_rerank(
+            [i for i in global_ranked if i not in seen], [option_text], domain
+        )
+        balanced.extend(global_ranked[: max(0, top_k - len(balanced))])
+
+        # 极端情况下某份文档没有候选，再按全局结果补齐。
+        seen = set(balanced)
+        if len(balanced) < top_k:
+            all_ranks = [_rrf([self._bm25_rank(q)[:pool]]) for q in clean_queries]
+            global_scores: dict[int, float] = {}
+            for scores in all_ranks:
+                for idx, score in scores.items():
+                    global_scores[idx] = global_scores.get(idx, 0.0) + score
+            rest = sorted(global_scores, key=lambda i: global_scores[i], reverse=True)
+            rest = self._local_rerank(
+                [i for i in rest if i not in seen], [option_text], domain
+            )
+            balanced.extend(rest[: top_k - len(balanced)])
+
+        # 可选的选项级 cross-encoder。精排只改变顺序，不丢掉文档均衡候选。
+        if use_rerank and self.llm is not None and len(balanced) > 1:
+            docs = [self.chunks[i]["text"][:700] for i in balanced]
+            rerank_query = "\n".join(clean_queries[:4])
+            order = self.llm.rerank(rerank_query, docs, top_n=len(balanced))
+            if order:
+                balanced = [balanced[i] for i in order]
+
+        return [self.chunks[i] for i in balanced[:top_k]]
 
 
 def build_context(chunks: list[dict], max_chars: int = 10000) -> str:

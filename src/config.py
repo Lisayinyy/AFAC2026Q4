@@ -113,6 +113,7 @@ class LLMClient:
         thinking: bool = False,
     ) -> str:
         import time as _t
+        last_error = None
         for attempt in range(6):
             _throttle()
             try:
@@ -124,6 +125,7 @@ class LLMClient:
                     extra_body={"enable_thinking": thinking},
                 )
             except Exception as e:
+                last_error = e
                 # 429 限流 / 网络抖动:退避后重试(逐次加长)
                 etype = type(e).__name__
                 if ("429" in str(e) or "RateLimit" in etype
@@ -135,7 +137,10 @@ class LLMClient:
             self.meter.add(resp.usage)
             content = resp.choices[0].message.content or ""
             return content.strip()
-        print("[LLM ERROR] 429 重试耗尽")
+        if last_error is None:
+            print("[LLM ERROR] 请求重试耗尽")
+        else:
+            print(f"[LLM ERROR] 重试耗尽: {type(last_error).__name__}: {last_error}")
         return ""
 
     def embed(self, texts: list[str]) -> list[list[float]]:

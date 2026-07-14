@@ -18,7 +18,12 @@ _DOMAIN_HINT = {
     "financial_reports": (
         "这是上市公司年报题。资料中【表格】块含合并利润表、现金流量表、分红方案等"
         "关键数字。务必从表格中逐字核对营业收入、净利润、经营活动现金流、研发投入、"
-        "每股分红等数值;涉及同比/占比/增长率时先取两个原始数再计算,不要凭印象。"
+        "每股分红等数值。\n"
+        "★数值/比较/计算型陈述的处理(最易漏判):遇到『高于/低于/超过/降幅/增长率/"
+        "占比/约为X%/同比』这类表述,必须:①先从资料抓出【两个原始数值】并写出来;"
+        "②当场做减法/除法算出结果;③再与陈述比对。只要算出来与陈述一致就判『成立』,"
+        "不要因为『需要计算』或『资料没直接给出结论』就回避判否——原始数据在资料里"
+        "就等于可推出,这类陈述通常是对的。"
     ),
     "insurance": (
         "这是保险条款题。注意区分身故金、现金价值、账户价值、免赔额、等待期、给付比例"
@@ -33,7 +38,11 @@ _DOMAIN_HINT = {
         "比例、期限、适用范围;逐条核对措辞,警惕'应当/可以''以上/以下'等细节。"
     ),
     "research": (
-        "这是行业研究报告题。核对报告中的数据、观点、结论;区分事实与预测。"
+        "这是行业研究报告题。核对报告中的数据、观点、结论;区分事实与预测。\n"
+        "★数值/比较/计算型陈述的处理(最易漏判):遇到『达到X亿/复合增速X%/贡献率"
+        "超过X%/同比/高于/接近』这类表述,必须先在资料里定位对应的原始数字,必要时"
+        "当场做增速或比较计算,再与陈述比对。只要资料里的数字能支持(数量级、口径一致),"
+        "就判『成立』,不要因为陈述换了说法或需要一步计算就判否。"
     ),
 }
 
@@ -54,6 +63,41 @@ def _extract_answer_letters(text: str, valid: list[str]) -> list[str]:
         c = c.upper()
         if c in valid and c not in out:
             out.append(c)
+    return out
+
+
+def _parse_per_option(text: str, valid: list[str]) -> list[str]:
+    """逐项兜底解析:当输出被截断、缺『答案:』总结行时,从每个选项的
+    『判定:成立/不成立』结构里逐项判断,把判『成立』的选项收进来。
+
+    切分依据:以行首或加粗形式出现的『<字母>.』或『选项<字母>』作为分段锚点。
+    对每段找最后一个『成立/不成立』判定词(『不成立』优先级高于『成立』)。
+    """
+    out = []
+    for letter in valid:
+        # 定位该选项段落:'A.' / 'A、' / '选项A' / '**A.' 等
+        pat = re.compile(rf"(?:选项\s*)?[*_ ]*{letter}[.、,，:：)]", re.M)
+        starts = [m.start() for m in pat.finditer(text)]
+        if not starts:
+            continue
+        seg_start = starts[0]
+        # 段落终点:下一个选项锚点之前
+        seg_end = len(text)
+        for other in valid:
+            if other == letter:
+                continue
+            op = re.compile(rf"(?:选项\s*)?[*_ ]*{other}[.、,，:：)]", re.M)
+            for m in op.finditer(text):
+                if m.start() > seg_start and m.start() < seg_end:
+                    seg_end = m.start()
+        seg = text[seg_start:seg_end]
+        # 该段判定:优先看最后一次出现的判定词
+        judgments = re.findall(r"不\s*成立|成立|不\s*正确|正确|不\s*符合|符合", seg)
+        if not judgments:
+            continue
+        last = judgments[-1].replace(" ", "")
+        if last in ("成立", "正确", "符合"):
+            out.append(letter)
     return out
 
 
@@ -102,9 +146,14 @@ def _answer_multi(llm: LLMClient, domain: str, question: str,
     )
     out = llm.chat(
         [{"role": "system", "content": sys}, {"role": "user", "content": user}],
-        max_tokens=1600, thinking=False,
+        max_tokens=3000, thinking=False,
     )
-    got = _extract_answer_letters(out, valid)
+    # 有『答案:』总结行 → 信任它;无(极可能被截断)→ 用逐项兜底解析。
+    has_mark = bool(re.search(r"(?:答案|正确选项)\s*[:：]", out or ""))
+    if has_mark:
+        got = _extract_answer_letters(out, valid)
+    else:
+        got = _parse_per_option(out, valid)
     return got if got else [valid[0]]
 
 

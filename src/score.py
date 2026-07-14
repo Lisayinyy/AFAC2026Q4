@@ -7,7 +7,7 @@ import csv
 import sys
 from pathlib import Path
 
-GT_DEFAULT = "/Users/bytedance/Documents/AFAC2026文件/answer_group_a.csv"
+GT_DEFAULT = str(Path(__file__).resolve().parent.parent / "output" / "answer_group_a.csv")
 Q_DIR = Path("/Users/bytedance/Documents/AFAC2026文件/public_dataset_upload/questions/group_a")
 Q_FILES = {
     "insurance": "insurance_questions.json",

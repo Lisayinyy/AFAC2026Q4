@@ -224,4 +224,8 @@ cache/
 output/*.log
 output/test_*
 # summary.json 为每次运行的中间统计,不入库(提交只需 answer.csv)
-output/summary.json
+output/*.json
+output/*.csv
+output/*.jsonl
+
+
