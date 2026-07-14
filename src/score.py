@@ -1,14 +1,11 @@
-"""用标准答案给 answer.csv 打分,按领域/题型拆解正确率。
-
-用法: python src/score.py <answer.csv> [<ground_truth.csv>]
-评测规则:单选/判断取首字母;多选去重排序后完全匹配(无部分分)。
-"""
+"""用标准答案给 answer.csv 打分,按领域/题型拆解正确率。"""
+import argparse
 import csv
-import sys
 from pathlib import Path
 
-GT_DEFAULT = "/Users/bytedance/Documents/AFAC2026文件/answer_group_a.csv"
-Q_DIR = Path("/Users/bytedance/Documents/AFAC2026文件/public_dataset_upload/questions/group_a")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+GT_DEFAULT = PROJECT_ROOT / "output" / "answer_group_a.csv"
+Q_DIR_DEFAULT = PROJECT_ROOT.parent / "public_dataset_upload" / "questions" / "group_a"
 Q_FILES = {
     "insurance": "insurance_questions.json",
     "financial_reports": "financial_reports_questions.json",
@@ -37,17 +34,23 @@ def load_csv(path):
 
 def main():
     import json
-    pred_path = sys.argv[1]
-    gt_path = sys.argv[2] if len(sys.argv) > 2 else GT_DEFAULT
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("prediction", type=Path)
+    parser.add_argument("ground_truth", nargs="?", type=Path, default=GT_DEFAULT)
+    parser.add_argument("--questions-dir", type=Path, default=Q_DIR_DEFAULT)
+    args = parser.parse_args()
 
     # qid -> (domain, fmt)
     meta = {}
     for dom, fn in Q_FILES.items():
-        for q in json.loads((Q_DIR / fn).read_text(encoding="utf-8")):
+        path = args.questions_dir / fn
+        if not path.is_file():
+            parser.error(f"题目文件不存在: {path}；请通过 --questions-dir 指定题目目录")
+        for q in json.loads(path.read_text(encoding="utf-8")):
             meta[q["qid"]] = (dom, q["answer_format"])
 
-    pred = load_csv(pred_path)
-    gt = load_csv(gt_path)
+    pred = load_csv(args.prediction)
+    gt = load_csv(args.ground_truth)
 
     # 统计
     from collections import defaultdict

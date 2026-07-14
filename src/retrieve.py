@@ -33,6 +33,46 @@ def _rrf(rank_lists: list[list[int]], k: int = 60) -> dict[int, float]:
     return scores
 
 
+def _term_overlap(left: str, right: str) -> float:
+    a, b = set(_tokenize(left)), set(_tokenize(right))
+    if not a or not b:
+        return 0.0
+    return len(a & b) / max(1, min(len(a), len(b)))
+
+
+def _mmr_select(candidates: list[int], scores: dict[int, float], chunks: list[dict],
+                limit: int, region_cap: int = 2) -> list[int]:
+    """按相关性+多样性选块，限制同一区域重复挤占上下文。"""
+    selected: list[int] = []
+    region_counts: dict[tuple, int] = {}
+    while candidates and len(selected) < limit:
+        best = None
+        best_score = float("-inf")
+        for i in candidates:
+            c = chunks[i]
+            key = (c.get("doc_id"), c.get("region", c.get("chunk_id")))
+            if region_counts.get(key, 0) >= region_cap:
+                continue
+            redundancy = max(
+                (_term_overlap(c["text"], chunks[j]["text"]) for j in selected),
+                default=0.0,
+            )
+            value = scores.get(i, 0.0) - 0.35 * redundancy
+            # 表格/标题块在平分时略优先，但不突破文档和区域配额。
+            if c.get("is_table"):
+                value += 0.08
+            if value > best_score:
+                best, best_score = i, value
+        if best is None:
+            break
+        candidates.remove(best)
+        selected.append(best)
+        c = chunks[best]
+        key = (c.get("doc_id"), c.get("region", c.get("chunk_id")))
+        region_counts[key] = region_counts.get(key, 0) + 1
+    return selected
+
+
 class DocRetriever:
     """针对单题引用的若干文档构建 BM25 索引,配合 rerank 精排。"""
 
@@ -107,8 +147,8 @@ class DocRetriever:
                 rank_lists.append(ranked)
             fused = _rrf(rank_lists)
             cand = sorted(fused, key=lambda i: fused[i], reverse=True)[:pool]
-            cand = self._local_rerank(cand, options, domain)[:per_doc]
-            balanced.extend(cand)
+            cand = self._local_rerank(cand, options, domain)
+            balanced.extend(_mmr_select(cand, fused, self.chunks, per_doc))
 
         # 2) 统一 rerank 精排(可选);保证不丢均衡覆盖
         if self.llm is not None and len(balanced) > top_k:
@@ -117,7 +157,13 @@ class DocRetriever:
             if order:
                 balanced = [balanced[o] for o in order]
 
-        return [self.chunks[i] for i in balanced[: max(top_k, per_doc * n_docs)]]
+        # 最终再做一次跨文档 MMR，保留每份文档的证据覆盖，并过滤重复 overlap 块。
+        fused_final = {i: 1.0 / (pos + 1) for pos, i in enumerate(balanced)}
+        selected = _mmr_select(
+            list(dict.fromkeys(balanced)), fused_final, self.chunks,
+            max(top_k, per_doc * n_docs), region_cap=1,
+        )
+        return [self.chunks[i] for i in selected]
 
 
 def build_context(chunks: list[dict], max_chars: int = 10000) -> str:
@@ -125,7 +171,9 @@ def build_context(chunks: list[dict], max_chars: int = 10000) -> str:
     parts = []
     used = 0
     for c in chunks:
-        header = f"【来源: {c['doc_id']} #chunk{c['chunk_id']}】\n"
+        section = c.get("section") or "未标注章节"
+        header = (f"【来源: {c['doc_id']} #chunk{c['chunk_id']} "
+                  f"章节:{section} 区域:{c.get('region', '?')}】\n")
         body = c["text"]
         if used + len(header) + len(body) > max_chars:
             body = body[: max(0, max_chars - used - len(header))]
