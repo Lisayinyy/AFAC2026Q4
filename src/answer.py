@@ -27,6 +27,22 @@ def _evidence_signature(text: str) -> tuple[set[str], set[str], set[str]]:
     negations = terms & _NEGATION_TERMS
     return terms, numbers, negations
 
+
+def _question_budget(domain: str, question: str, options: dict,
+                     doc_ids: list[str], fmt: str) -> tuple[int, int, int]:
+    """按题目复杂度返回 (top_k, shared_chars, option_chars)。"""
+    normalized = normalize_numeric_text(question + " " + " ".join(options.values()))
+    numbers = len(re.findall(r"\d[\d.]*%?", normalized))
+    negations = len(set(_tokenize(normalized)) & _NEGATION_TERMS)
+    complexity = (len(set(doc_ids)) - 1) * 1.5 + numbers * 0.35 + negations * 0.5
+    complexity += 1.0 if fmt == "multi" else 0.0
+    if domain == "financial_reports":
+        base = (12, 6500, 1200)
+    else:
+        base = (10, 5600, 1000)
+    bump = min(4, max(0, int(complexity)))
+    return min(16, base[0] + bump), min(9000, base[1] + bump * 500), min(1800, base[2] + bump * 120)
+
 # 分领域作答侧重
 _DOMAIN_HINT = {
     "financial_reports": (
@@ -245,11 +261,10 @@ def answer_question(llm: LLMClient, q: dict) -> str:
     valid = list(options.keys())
 
     retriever = DocRetriever(domain, doc_ids, llm=llm)
-    # 多选题额外生成选项级紧凑证据；共享上下文仍保留跨文档关系。
-    if domain == "financial_reports":
-        top_k, max_chars, option_budget = 14, 7500, 1400
-    else:
-        top_k, max_chars, option_budget = 12, 6500, 1200
+    # 复杂题增加证据，简单题减少上下文；所有预算有硬上限。
+    top_k, max_chars, option_budget = _question_budget(
+        domain, question, options, doc_ids, fmt
+    )
     chunks = retriever.retrieve(question, list(options.values()),
                                 pool=60, top_k=top_k, domain=domain)
     if fmt == "multi":
