@@ -19,9 +19,19 @@ import fitz  # PyMuPDF
 from bs4 import BeautifulSoup
 
 from config import CACHE_ROOT, DOMAIN_DIRS
+from semantic_split import split_semantic
 
 CHUNK_SIZE = 1000          # 目标 chunk 字符数(中文,约等价 ~1800 英文字符)
 CHUNK_OVERLAP = 150
+MIN_CHUNK_SIZE = 180
+CACHE_VERSION = 6
+
+_HEADING_RE = re.compile(
+    r"^(?:第[一二三四五六七八九十百千万0-9]+[章节条款]|"
+    r"[一二三四五六七八九十]+、|[0-9]{1,2}(?:\.[0-9]+)*[、.]|"
+    r"（[一二三四五六七八九十0-9]+）|[A-Z][、.]|"
+    r"(?:目录|摘要|风险提示|重大事项|发行条款|财务情况|附录|定义与解释).{0,40})"
+)
 
 
 def resolve_doc_path(domain: str, doc_id: str) -> Path | None:
@@ -64,19 +74,42 @@ def _table_to_markdown(rows: list[list]) -> str:
     return "\n".join(lines)
 
 
-def _extract_pdf(path: Path) -> tuple[str, list[str]]:
-    """返回 (正文文本, 表格Markdown列表)。"""
+def _extract_pdf(path: Path) -> tuple[str, list[dict]]:
+    """返回正文及带页码/邻近标题的表格列表。"""
     doc = fitz.open(path)
     text_parts = []
-    tables_md = []
-    for page in doc:
-        text_parts.append(page.get_text("text"))
+    tables_md: list[dict] = []
+    for page_no, page in enumerate(doc, 1):
+        page_text = page.get_text("text")
+        text_parts.append(page_text)
         try:
             tabs = page.find_tables()
-            for t in tabs.tables:
+            for table_no, t in enumerate(tabs.tables):
                 md = _table_to_markdown(t.extract())
                 if md and len(md) > 20:
-                    tables_md.append(md)
+                    # The text immediately above a table usually carries its name,
+                    # unit and consolidated/parent-company scope. Preserve a small
+                    # deterministic window instead of sending the whole page.
+                    context = ""
+                    try:
+                        y0 = float(t.bbox[1])
+                        clip = fitz.Rect(
+                            0, max(0.0, y0 - 140.0), page.rect.width, y0
+                        )
+                        nearby = [
+                            re.sub(r"\s+", " ", line).strip()
+                            for line in page.get_text("text", clip=clip).splitlines()
+                            if line.strip()
+                        ]
+                        context = " ".join(nearby[-4:])[-320:]
+                    except Exception:
+                        pass
+                    tables_md.append({
+                        "markdown": md,
+                        "page": page_no,
+                        "table_no": table_no,
+                        "context": context,
+                    })
         except Exception:
             pass
     doc.close()
@@ -101,52 +134,135 @@ def _clean(text: str) -> str:
     return text.strip()
 
 
+def _is_heading(paragraph: str) -> bool:
+    paragraph = paragraph.strip()
+    return bool(paragraph and len(paragraph) <= 100 and _HEADING_RE.match(paragraph))
+
+
 def chunk_text(text: str, doc_id: str, domain: str) -> list[dict]:
-    """按段落聚合到 ~CHUNK_SIZE 字符,带重叠。"""
+    """按标题、段落和句子边界切块，并保存章节/区域元数据。"""
     text = _clean(text)
     paragraphs = [p.strip() for p in text.split("\n") if p.strip()]
 
-    chunks: list[str] = []
+    chunks: list[dict] = []
     buf = ""
+    section = ""
+
+    def flush() -> None:
+        nonlocal buf
+        value = buf.strip()
+        if not value:
+            return
+        chunks.append({
+            "doc_id": doc_id,
+            "domain": domain,
+            "chunk_id": len(chunks),
+            "text": value,
+            "is_table": False,
+            "section": section,
+            "region": section or "__preamble__",
+            "chunk_type": "prose",
+            "char_count": len(value),
+        })
+
     for para in paragraphs:
-        if len(buf) + len(para) + 1 <= CHUNK_SIZE:
-            buf += para + "\n"
-        else:
-            if buf:
-                chunks.append(buf.strip())
-            tail = buf[-CHUNK_OVERLAP:] if buf else ""
-            buf = tail + para + "\n"
-    if buf.strip():
-        chunks.append(buf.strip())
+        if _is_heading(para):
+            flush()
+            section = para
+            buf = para + "\n"
+            continue
+        for sentence_group in split_semantic(para, max_sentences=8, threshold=0.08):
+            if len(buf) + len(sentence_group) + 1 <= CHUNK_SIZE:
+                buf += sentence_group + "\n"
+                continue
+            if len(buf.strip()) >= MIN_CHUNK_SIZE:
+                previous = buf
+                flush()
+                tail = previous[-CHUNK_OVERLAP:]
+                buf = (section + "\n" if section else "") + tail + sentence_group + "\n"
+            else:
+                buf += sentence_group + "\n"
+    flush()
+    return chunks
 
-    return [
-        {"doc_id": doc_id, "domain": domain, "chunk_id": i,
-         "text": c, "is_table": False}
-        for i, c in enumerate(chunks)
-    ]
 
-
-def _chunk_tables(tables_md: list[str], doc_id: str, domain: str,
+def _chunk_tables(tables_md: list[dict | str], doc_id: str, domain: str,
                   start_id: int) -> list[dict]:
-    """每个表格作为独立 chunk;超长表格按行切分。"""
+    """每个表格作为独立 chunk；超长表格按行切分并继承表头。"""
     out = []
     cid = start_id
-    for md in tables_md:
+    last_year_header = ""
+    last_header_page: int | None = None
+    for table_index, table in enumerate(tables_md):
+        if isinstance(table, dict):
+            md = table.get("markdown", "")
+            page = table.get("page")
+            context = table.get("context", "")
+            table_no = table.get("table_no", table_index)
+        else:  # 兼容旧调用与单测
+            md, page, context, table_no = table, None, "", table_index
+        raw_lines = [line for line in md.splitlines() if line.strip()]
+        has_year_header = any(
+            len(re.findall(r"(?:19|20)\d{2}", line)) >= 2
+            for line in raw_lines[:3]
+        )
+        continuation_metric = bool(
+            raw_lines and re.search(
+                r"营业收入|净利润|现金流量净额|每股收益|净资产收益率|"
+                r"总资产|净资产", raw_lines[0]
+            )
+        )
+        if (
+            not has_year_header and continuation_metric and last_year_header
+            and (page is None or last_header_page is None or page - last_header_page <= 1)
+        ):
+            md = last_year_header + "\n" + md
+            raw_lines.insert(0, last_year_header)
+            has_year_header = True
+
+        if has_year_header:
+            for line_no, line in enumerate(raw_lines[:3]):
+                if len(re.findall(r"(?:19|20)\d{2}", line)) >= 2:
+                    header_lines = [line]
+                    if line_no + 1 < len(raw_lines):
+                        next_line = raw_lines[line_no + 1]
+                        numeric_cells = re.findall(r"[-+]?\d[\d,]*(?:\.\d+)?%?", next_line)
+                        if not numeric_cells and re.search(r"金额|占比|比例|增减", next_line):
+                            header_lines.append(next_line)
+                    last_year_header = "\n".join(header_lines)
+                    last_header_page = page
+                    break
         if len(md) <= CHUNK_SIZE * 1.5:
             pieces = [md]
         else:  # 超长表格按行切
             lines = md.split("\n")
-            pieces, buf = [], ""
-            for ln in lines:
+            # 跨块重复表头，防止命中后只剩数字而年份/单位丢失。
+            header_count = 1
+            if len(lines) >= 2:
+                next_numbers = re.findall(
+                    r"[-+]?\d[\d,]*(?:\.\d+)?%?", lines[1]
+                )
+                if not next_numbers and re.search(r"金额|占比|比例|增减", lines[1]):
+                    header_count = 2
+            header = "\n".join(lines[:header_count]).strip()
+            pieces, buf = [], header + "\n"
+            for ln in lines[header_count:]:
                 if len(buf) + len(ln) + 1 > CHUNK_SIZE:
                     pieces.append(buf.strip())
-                    buf = ""
+                    buf = header + "\n"
                 buf += ln + "\n"
             if buf.strip():
                 pieces.append(buf.strip())
-        for p in pieces:
+        for piece_no, p in enumerate(pieces):
             out.append({"doc_id": doc_id, "domain": domain, "chunk_id": cid,
-                        "text": "[表格]\n" + p, "is_table": True})
+                        "text": "[表格]\n" + p, "is_table": True,
+                        "section": context or "table",
+                        "region": f"table:{table_no}",
+                        "table_id": f"{doc_id}:p{page or 0}:t{table_no}",
+                        "table_piece": piece_no,
+                        "table_context": context,
+                        "page": page,
+                        "chunk_type": "table", "char_count": len(p) + 5})
             cid += 1
     return out
 
@@ -157,7 +273,9 @@ def build_doc(domain: str, doc_id: str, use_cache: bool = True) -> list[dict]:
     cache_file = CACHE_ROOT / f"{domain}__{doc_id}.json"
 
     if use_cache and cache_file.exists():
-        return json.loads(cache_file.read_text(encoding="utf-8"))
+        cached = json.loads(cache_file.read_text(encoding="utf-8"))
+        if isinstance(cached, dict) and cached.get("version") == CACHE_VERSION:
+            return cached.get("chunks", [])
 
     path = resolve_doc_path(domain, doc_id)
     if path is None:
@@ -175,7 +293,8 @@ def build_doc(domain: str, doc_id: str, use_cache: bool = True) -> list[dict]:
         chunks = chunk_text(_extract_text_file(path), doc_id, domain)
 
     cache_file.write_text(
-        json.dumps(chunks, ensure_ascii=False), encoding="utf-8"
+        json.dumps({"version": CACHE_VERSION, "chunks": chunks}, ensure_ascii=False),
+        encoding="utf-8",
     )
     return chunks
 

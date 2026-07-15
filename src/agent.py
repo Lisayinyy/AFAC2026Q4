@@ -47,7 +47,9 @@ _DOMAIN_POLICY = {
         "‘超过/约为/达到’，应 support。题干或文档上下文已经限定的地区/主体可在选项中省略。"
         "复合陈述的核心数量事实准确、尾部只是宽泛影响总结且没有直接相反证据时，也应 support。"
         "指标名称略有概括不等于矛盾；只有相同主体、时期、指标下存在方向或数值冲突才"
-        "contradict，证据缺失只能 uncertain。"
+        "contradict，证据缺失只能 uncertain。若选项省略地域，但引用文档中相同期间、"
+        "数值和指标只有一个明确出处，且题干未要求地域必须显式写出，应按该直接事实"
+        "support，不能以‘未限定地区’为由否定。"
     ),
     "financial_contracts": (
         "募集说明书可能用发行人、标的公司、控股股东等不同主体，必须先对齐主体。措辞省略、"
@@ -269,12 +271,75 @@ def _query_expansions(q: dict, item: dict) -> list[str]:
     return list(dict.fromkeys(x.strip() for x in queries if x.strip()))
 
 
+def _match_option_documents(option_text: str,
+                            document_profiles: dict[str, str]) -> list[str]:
+    """把包含明确产品/主体名称的选项绑定到唯一文档。
+
+    仅在匹配明显领先时返回，避免“第二份文档”“两家公司”一类比较选项被误限流。
+    该绑定主要阻止保险多产品题把 A 产品条款借给 B 产品。
+    """
+    ignore = {
+        "保险", "产品", "条款", "公司", "医疗险", "重疾险", "保险金",
+        "费用", "规定", "文档", "第一份", "第二份",
+    }
+    insurer_brands = {
+        brand for brand in ("国寿", "太保", "平安", "众安", "人保", "泰康", "太平", "新华", "阳光")
+        if brand in option_text
+    }
+    if len(insurer_brands) >= 2:
+        return []
+    canonical_option = (
+        option_text.replace("家财险", "家庭财产保险")
+        .replace("重疾险", "重大疾病保险")
+        .replace("医疗险", "医疗保险")
+    )
+    terms = {
+        token for token in _tokenize(canonical_option)
+        if len(token) >= 2 and token not in ignore
+    }
+    compact_option = re.sub(r"[^\u4e00-\u9fffA-Za-z0-9]", "", canonical_option)
+    scores: dict[str, int] = {}
+    for doc_id, profile in document_profiles.items():
+        compact_profile = re.sub(r"[^\u4e00-\u9fffA-Za-z0-9]", "", profile)
+        score = sum(len(term) for term in terms if term in profile)
+        # PDF 文本和产品简称常在词中间插入“产险/复发/住院”等字样，无法靠
+        # 一个连续长串匹配。按选项字符位置贪心选择不重叠的最长片段，既能识别
+        # “家财险→家庭财产保险”，也能组合“众安 + 白血病”。
+        occupied: set[int] = set()
+        ignored_fragments = {"保险", "公司", "产品", "条款", "医疗"}
+        for size in range(min(8, len(compact_option)), 1, -1):
+            for start in range(len(compact_option) - size + 1):
+                if any(pos in occupied for pos in range(start, start + size)):
+                    continue
+                fragment = compact_option[start:start + size]
+                if fragment in ignored_fragments or fragment not in compact_profile:
+                    continue
+                score += size
+                occupied.update(range(start, start + size))
+        # 产品简称通常是连续 4~10 个字；连续命中比通用分词更可靠。
+        for size in range(min(12, len(compact_option)), 3, -1):
+            if any(
+                compact_option[start:start + size] in compact_profile
+                for start in range(len(compact_option) - size + 1)
+            ):
+                score += size
+                break
+        scores[doc_id] = score
+    if not scores:
+        return []
+    ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+    best_doc, best_score = ranked[0]
+    second_score = ranked[1][1] if len(ranked) > 1 else 0
+    return [best_doc] if best_score >= 5 and best_score >= second_score + 2 else []
+
+
 def build_evidence_matrix(
     retriever: DocRetriever,
     q: dict,
     plan: dict,
     *,
     use_rerank: bool = False,
+    document_profiles: dict[str, str] | None = None,
 ) -> dict[str, EvidenceSlot]:
     """逐选项检索；覆盖率低或跨文档不完整时自动扩检。"""
     matrix: dict[str, EvidenceSlot] = {}
@@ -284,22 +349,45 @@ def build_evidence_matrix(
     )
     for item in plan["items"]:
         letter = item["option"]
+        profiles = document_profiles or {}
+        matched_docs = (
+            _match_option_documents(item["claim"], profiles)
+            if q["domain"] == "insurance" else []
+        )
+        # If an explicit insurer brand is absent from all referenced documents, the
+        # option must not borrow evidence from a different product. This also makes
+        # a missing/decoy document explicit to the judge as an empty evidence slot.
+        explicit_brands = {
+            name for name in ("国寿", "太保", "平安", "众安", "人保", "泰康", "太平", "新华", "阳光")
+            if name in item["claim"]
+        }
+        missing_named_subject = bool(
+            q["domain"] == "insurance" and len(explicit_brands) == 1
+            and not any(
+                next(iter(explicit_brands)) in profile for profile in profiles.values()
+            )
+        )
         queries = _query_expansions(q, item) + list(item.get("search_queries", []))
         queries.append(f"{q['question']} {item['claim']}")
         focus_text = f"{q['question']} {item['claim']}"
-        chunks = retriever.retrieve_for_option(
-            queries,
-            focus_text,
-            pool=45,
-            top_k=8,
-            domain=q["domain"],
-            use_rerank=use_rerank,
-            prefer_doc_balance=prefer_doc_balance,
+        compact_domain = q["domain"] in {"financial_reports", "regulatory"}
+        base_top_k = 6 if compact_domain else 8
+        chunks = [] if missing_named_subject else retriever.retrieve_for_option(
+            queries, focus_text, pool=45, top_k=base_top_k, domain=q["domain"],
+            use_rerank=use_rerank, prefer_doc_balance=prefer_doc_balance,
+            allowed_doc_ids=matched_docs or None,
         )
         coverage = _feature_coverage(item, chunks)
         doc_coverage = sorted({c["doc_id"] for c in chunks})
-        needs_expand = coverage < 0.48 or (
-            plan.get("cross_document") and len(doc_coverage) < len(q["doc_ids"])
+        expected_docs = matched_docs or q["doc_ids"]
+        closed_coverage_list = any(
+            c.get("retrieval_mode") == "closed_coverage_list" for c in chunks
+        )
+        needs_expand = not missing_named_subject and not closed_coverage_list and (
+            coverage < 0.48 or (
+            plan.get("cross_document") and not matched_docs
+            and len(doc_coverage) < len(expected_docs)
+            )
         )
         if needs_expand:
             extra_queries = (
@@ -310,16 +398,17 @@ def build_evidence_matrix(
                 extra_queries,
                 focus_text,
                 pool=80,
-                top_k=10,
+                top_k=8 if compact_domain else 10,
                 domain=q["domain"],
                 use_rerank=use_rerank,
                 prefer_doc_balance=prefer_doc_balance,
+                allowed_doc_ids=matched_docs or None,
             )
             seen = {(c["doc_id"], c["chunk_id"]) for c in chunks}
             chunks.extend(
                 c for c in extra if (c["doc_id"], c["chunk_id"]) not in seen
             )
-            chunks = chunks[:10]
+            chunks = chunks[:8 if compact_domain else 10]
             coverage = _feature_coverage(item, chunks)
             doc_coverage = sorted({c["doc_id"] for c in chunks})
         matrix[letter] = EvidenceSlot(
@@ -337,6 +426,30 @@ def build_evidence_matrix(
 
 def _best_excerpt(text: str, focus: str, max_chars: int) -> str:
     """围绕选项数字/关键词选择 Chunk 内最高匹配窗口，而非固定截取开头。"""
+    if text.lstrip().startswith("[表格]"):
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        features = list(dict.fromkeys(
+            [x for x in _NUM_RE.findall(focus) if len(x) >= 2]
+            + [x for x in _tokenize(focus) if len(x) >= 2]
+        ))
+        scored = [
+            (sum((4 if feature in _NUM_RE.findall(focus) else 1)
+                 for feature in features if feature in line), index)
+            for index, line in enumerate(lines)
+        ]
+        anchor = max(scored, default=(0, 0))[1]
+        # 表头与命中行的前后行一起保留，绝不在单元格中间截断。
+        ordered = list(dict.fromkeys([0, 1] + list(range(max(0, anchor - 2), min(len(lines), anchor + 3)))))
+        chosen: list[str] = []
+        used = 0
+        for index in ordered:
+            line = lines[index]
+            if used + len(line) + (1 if chosen else 0) > max_chars:
+                continue
+            chosen.append(line)
+            used += len(line) + (1 if chosen else 0)
+        return "\n".join(chosen)
+
     clean = re.sub(r"\s+", " ", text).strip()
     if len(clean) <= max_chars:
         return clean
@@ -379,9 +492,19 @@ def _matrix_text(matrix: dict[str, EvidenceSlot], per_chunk: int = 550) -> str:
         )
         for idx, chunk in enumerate(slot.chunks, 1):
             text = _best_excerpt(chunk["text"], slot.focus or slot.claim, per_chunk)
+            evidence_kind = chunk.get(
+                "fact_type", "table" if chunk.get("is_table") else "prose"
+            )
+            matched_fact = chunk.get("atomic_text", "")
+            fact_hint = ""
+            if matched_fact and matched_fact.strip() != chunk["text"].strip():
+                fact_hint = (
+                    " | 命中原子事实:"
+                    + _best_excerpt(matched_fact, slot.focus or slot.claim, 160)
+                )
             parts.append(
                 f"[{letter}-E{idx} | {chunk['doc_id']}#chunk{chunk['chunk_id']}"
-                f" | table={bool(chunk.get('is_table'))}] {text}"
+                f" | type={evidence_kind}{fact_hint}] {text}"
             )
     return "\n".join(parts)
 
@@ -394,7 +517,7 @@ def build_document_profiles(retriever: DocRetriever) -> dict[str, str]:
     )
     for doc_id in retriever.doc_ids:
         chunks = sorted(
-            (c for c in retriever.chunks
+            (c for c in retriever.source_chunks
              if c["doc_id"] == doc_id and not c.get("is_table")),
             key=lambda c: c["chunk_id"],
         )[:5]
@@ -436,7 +559,8 @@ def build_document_term_stats(retriever: DocRetriever, q: dict) -> dict[str, dic
     stats: dict[str, dict[str, int]] = {}
     for doc_id in retriever.doc_ids:
         blob = "\n".join(
-            chunk["text"] for chunk in retriever.chunks if chunk["doc_id"] == doc_id
+            chunk["text"] for chunk in retriever.source_chunks
+            if chunk["doc_id"] == doc_id
         )
         stats[doc_id] = {term: blob.count(term) for term in terms}
         if "犹豫期" in text:
@@ -651,8 +775,36 @@ def validate_memory(q: dict, plan: dict, memory: dict) -> dict[str, list[str]]:
             current.append("calculation_incomplete")
         if entry.get("missing_facts"):
             current.append("missing_fact")
+        evidence = entry.get("evidence", [])
+        if not isinstance(evidence, list) or not evidence:
+            current.append("missing_evidence_citation")
+        else:
+            valid_prefix = f"{letter}-E"
+            if not any(str(source).startswith(valid_prefix) for source in evidence):
+                current.append("invalid_evidence_citation")
         flags[letter] = current
     return flags
+
+
+def _merge_review_result(first: dict, review: dict, flags: list[str]) -> dict:
+    """合并独立复核，避免低置信二次判断覆盖高置信首判。
+
+    模型给出的 confidence 并未校准；只有首判本身不确定/存在结构问题，或复核
+    具有明显更强置信度时才允许翻转。引用了复核证据的结果获得小幅门槛优惠。
+    """
+    if review.get("verdict") == "uncertain":
+        return first
+    if review.get("verdict") == first.get("verdict"):
+        return review if review.get("confidence", 0.0) >= first.get("confidence", 0.0) else first
+
+    first_conf = float(first.get("confidence") or 0.0)
+    review_conf = float(review.get("confidence") or 0.0)
+    cited = any(re.fullmatch(r"[A-D]-R\d+", str(item)) for item in review.get("evidence", []))
+    if first.get("verdict") == "uncertain" or flags:
+        threshold = 0.62 if cited else 0.72
+        return review if review_conf >= threshold else first
+    threshold = max(0.82, first_conf + (0.04 if cited else 0.10))
+    return review if review_conf >= threshold else first
 
 
 def judge_matrix(llm: LLMClient, q: dict, plan: dict, memory: dict,
@@ -721,34 +873,58 @@ def judge_matrix(llm: LLMClient, q: dict, plan: dict, memory: dict,
 def _review_targets(q: dict, verdicts: dict, flags: dict[str, list[str]],
                     matrix: dict[str, EvidenceSlot], memory: dict) -> list[str]:
     selected = [k for k, v in verdicts["options"].items() if v["verdict"] == "support"]
-    targets = []
+    ranked_targets: list[tuple[float, str]] = []
     for letter, item in verdicts["options"].items():
-        risky = (
-            item["verdict"] == "uncertain"
-            or item["confidence"] < 0.72
-            or bool(flags.get(letter))
-            or matrix[letter].coverage < 0.55
-            # 压缩器生成了算式后，必须让复核器看到本地计算结果再定案。
-            or bool(memory.get("options", {}).get(letter, {})
-                    .get("calculation", {}).get("computed"))
+        confidence = float(item.get("confidence") or 0.0)
+        current_flags = set(flags.get(letter, []))
+        citation_broken = bool(current_flags & {
+            "missing_evidence_citation", "invalid_evidence_citation"
+        })
+        semantic_gap = bool(current_flags & {
+            "missing_period", "missing_unit", "missing_subject",
+            "missing_fact", "calculation_incomplete",
+        })
+        computed = bool(
+            memory.get("options", {}).get(letter, {})
+            .get("calculation", {}).get("computed")
         )
-        if risky:
-            targets.append(letter)
-    # 多选只选 0/1 项时，重点复核未选项，直接针对最常见的漏选模式。
+        score = 0.0
+        if item["verdict"] == "uncertain":
+            score += 5.0
+        if citation_broken:
+            score += 4.0
+        threshold = 0.70 if item["verdict"] == "support" else 0.66
+        if confidence < threshold:
+            score += 3.0 + (threshold - confidence)
+        if semantic_gap and confidence < 0.80:
+            score += 2.0
+        if matrix[letter].coverage < 0.42 and confidence < 0.80:
+            score += 1.5
+        if computed and confidence < 0.78:
+            score += 1.0
+        if score > 0:
+            ranked_targets.append((score, letter))
+
+    # 多选只选 0/1 项时保留一次“漏选申诉”，但只复核证据覆盖最好的一个
+    # 未选项，不再把全部未选项重新送入模型。
     if q["answer_format"] == "multi" and len(selected) <= 1:
-        targets.extend(k for k in q["options"] if k not in selected)
-    # v2 漏选申诉：多选题的非 support 项都获得一次面向“是否存在支持证据”的复核。
-    # 保险题同时复核已选项，专门清除跨产品套用造成的误选。
-    if q["answer_format"] == "multi":
-        targets.extend(
-            k for k, v in verdicts["options"].items()
-            if v["verdict"] != "support"
-        )
-        if q["domain"] == "insurance":
-            targets.extend(q["options"])
+        appeals = [
+            (matrix[k].coverage, k) for k in q["options"]
+            if k not in selected and matrix[k].coverage >= 0.58
+        ]
+        if appeals:
+            coverage, letter = max(appeals)
+            ranked_targets.append((1.0 + coverage, letter))
     if q["answer_format"] in {"mcq", "tf"} and len(selected) != 1:
-        targets.extend(q["options"])
-    return list(dict.fromkeys(targets))
+        ranked_targets.extend((2.5, letter) for letter in q["options"])
+
+    best: dict[str, float] = {}
+    for score, letter in ranked_targets:
+        best[letter] = max(score, best.get(letter, 0.0))
+    ordered = sorted(best, key=lambda letter: best[letter], reverse=True)
+    # 正常题至多复核两个选项；单选/判断首判非法时允许检查全部候选。
+    limit = len(q["options"]) if q["answer_format"] in {"mcq", "tf"} and len(selected) != 1 else 2
+    return ordered[:limit]
 
 
 def review_uncertain(
@@ -761,6 +937,7 @@ def review_uncertain(
     retriever: DocRetriever,
     document_profiles: dict[str, str],
     document_term_stats: dict[str, dict[str, int]],
+    matrix: dict[str, EvidenceSlot],
 ) -> dict:
     """对目标选项扩检后做一次独立复核，并返回可合并的局部 verdict。"""
     if not targets:
@@ -781,10 +958,19 @@ def review_uncertain(
         )
         focus_text = f"{q['question']} {item['claim']}"
         chunks = retriever.retrieve_for_option(
-            queries, focus_text, pool=100, top_k=12,
+            queries, focus_text, pool=80, top_k=8,
             domain=q["domain"], use_rerank=False,
             prefer_doc_balance=prefer_doc_balance,
         )
+        existing = {
+            (chunk["doc_id"], chunk["chunk_id"])
+            for chunk in matrix[letter].chunks
+        }
+        delta = [
+            chunk for chunk in chunks
+            if (chunk["doc_id"], chunk["chunk_id"]) not in existing
+        ]
+        chunks = (delta or chunks[:2])[:5]
         review_parts.append(f"\n### {letter}. {item['claim']}")
         for idx, chunk in enumerate(chunks, 1):
             text = _best_excerpt(chunk["text"], focus_text, 600)
@@ -792,6 +978,12 @@ def review_uncertain(
                 f"[{letter}-R{idx}|{chunk['doc_id']}#chunk{chunk['chunk_id']}] {text}"
             )
     domain_policy = _DOMAIN_POLICY.get(q["domain"], "")
+    target_memory = {
+        letter: memory.get("options", {}).get(letter, {}) for letter in targets
+    }
+    target_verdicts = {
+        letter: verdicts.get("options", {}).get(letter, {}) for letter in targets
+    }
     prompt = f"""你是第二位独立金融核查员。只复核指定选项，不受第一次结论影响。
 
 题目：{q['question']}
@@ -799,9 +991,9 @@ def review_uncertain(
 文档身份卡：{json.dumps(document_profiles, ensure_ascii=False)}
 全文主题词命中次数：{json.dumps(document_term_stats, ensure_ascii=False)}
 本领域裁决规则：{domain_policy}
-第一次结构化记忆：{json.dumps(memory, ensure_ascii=False)}
-第一次裁决：{json.dumps(verdicts, ensure_ascii=False)}
-扩展证据：
+待复核选项的结构化记忆：{json.dumps(target_memory, ensure_ascii=False)}
+待复核选项的第一次裁决：{json.dumps(target_verdicts, ensure_ascii=False)}
+增量证据：
 {''.join(review_parts)}
 
 逐项检查主体、年份、单位、数值和否定词。本轮同时是未选项的“漏选申诉”：主动寻找
@@ -876,20 +1068,8 @@ def reconcile_verdicts(
     document_term_stats = document_term_stats or {}
 
     def option_document(option_text: str) -> str | None:
-        ignore = {"保险", "产品", "条款", "公司", "重疾险", "医疗险"}
-        terms = {
-            token for token in _tokenize(option_text)
-            if len(token) >= 2 and token not in ignore
-        }
-        scores = {
-            doc_id: sum(len(term) for term in terms if term in profile)
-            for doc_id, profile in document_profiles.items()
-        }
-        if not scores:
-            return None
-        best = max(scores, key=scores.get)
-        ordered = sorted(scores.values(), reverse=True)
-        return best if scores[best] >= 3 and (len(ordered) == 1 or ordered[0] > ordered[1]) else None
+        matched = _match_option_documents(option_text, document_profiles)
+        return matched[0] if matched else None
 
     for letter, option_text in q.get("options", {}).items():
         item = verdicts.get("options", {}).get(letter)
@@ -977,9 +1157,13 @@ def reconcile_verdicts(
             and re.search(r"连续性|连续继续|后续年度", reason)
         ):
             new, rule = "support", "evaluate_hypothetical_antecedent_not_case_fact"
-        if old == "uncertain" and q.get("domain") == "insurance":
+        if old in {"uncertain", "contradict"} and q.get("domain") == "insurance":
             doc_id = option_document(option_text)
             stats = document_term_stats.get(doc_id or "", {})
+            profile = document_profiles.get(doc_id or "", "")
+            fixed_benefit_policy = bool(re.search(
+                r"重大疾病保险|终身寿险|身故保障", profile
+            )) and not re.search(r"医疗保险|费用补偿", profile)
             if "无免赔额" in option_text and stats.get("免赔额") == 0:
                 new, rule = "support", "closed_policy_has_no_deductible_term"
             elif (
@@ -987,8 +1171,9 @@ def reconcile_verdicts(
                 and "特定药品" in option_text
                 and stats.get("特定药品") == 0
                 and stats.get("院外") == 0
+                and fixed_benefit_policy
             ):
-                new, rule = "support", "closed_policy_lacks_drug_expense_terms"
+                new, rule = "support", "fixed_benefit_policy_lacks_drug_expense_coverage"
             elif (
                 "犹豫期" in question
                 and re.search(r"退还.{0,12}(?:全部|全额).{0,10}保险费", question)
@@ -998,10 +1183,16 @@ def reconcile_verdicts(
         if (
             old == "contradict"
             and q.get("domain") == "research"
-            and re.search(r"未限定主体|省略.{0,8}主体|主体归属", reason)
-            and re.search(r"证据.{0,12}(?:明确)?指出|事实陈述", reason)
+            and re.search(
+                r"未限定(?:主体|地区|地域)|省略.{0,8}(?:主体|地区|地域)|"
+                r"(?:主体|地区|地域).{0,8}(?:不明|缺失|归属)", reason
+            )
+            and re.search(
+                r"证据.{0,16}(?:明确)?(?:指出|显示|记载)|事实陈述|"
+                r"数值.{0,12}(?:一致|吻合|相符)", reason
+            )
         ):
-            new, rule = "support", "research_context_supplies_omitted_subject"
+            new, rule = "support", "research_context_supplies_omitted_scope"
 
         if new != old:
             item["verdict"] = new
@@ -1065,7 +1256,8 @@ def answer_question_agent(
     document_profiles = build_document_profiles(retriever)
     document_term_stats = build_document_term_stats(retriever, q)
     matrix = build_evidence_matrix(
-        retriever, q, plan, use_rerank=use_option_rerank
+        retriever, q, plan, use_rerank=use_option_rerank,
+        document_profiles=document_profiles,
     )
     memory = compress_memory(
         llm, q, plan, matrix, document_profiles, document_term_stats
@@ -1084,16 +1276,13 @@ def answer_question_agent(
     )
     reviewed = review_uncertain(
         llm, q, plan, memory, verdicts, targets, retriever, document_profiles,
-        document_term_stats,
+        document_term_stats, matrix,
     ) if targets else {}
-    # 复核置信度足够时覆盖第一次裁决；较弱的 uncertain 不覆盖确定结论。
+    # 证据感知合并复核；低置信的二次判断不能覆盖高置信首判。
     for letter, result in reviewed.items():
-        first = verdicts["options"][letter]
-        if result["verdict"] != "uncertain" and (
-            result["confidence"] >= 0.58
-            or first["verdict"] == "uncertain"
-        ):
-            verdicts["options"][letter] = result
+        verdicts["options"][letter] = _merge_review_result(
+            verdicts["options"][letter], result, flags.get(letter, [])
+        )
 
     deterministic_adjustments = reconcile_verdicts(
         q, verdicts, document_profiles, document_term_stats
@@ -1101,7 +1290,7 @@ def answer_question_agent(
     answer = _final_answer(q, verdicts)
     trace = {
         "qid": q["qid"],
-        "architecture": "option_evidence_agent_v3",
+        "architecture": "hierarchical_evidence_agent_v4",
         "question_type": plan.get("question_type"),
         "document_profiles": document_profiles,
         "document_term_stats": document_term_stats,

@@ -178,7 +178,7 @@ def main() -> None:
     completion = sum(r["completion_tokens"] for r in rows_by_qid.values())
     total = sum(r["total_tokens"] for r in rows_by_qid.values())
     summary = {
-        "architecture": "option_evidence_agent_v3",
+        "architecture": "hierarchical_evidence_agent_v4",
         "total_tokens": total,
         "prompt_tokens": prompt,
         "completion_tokens": completion,

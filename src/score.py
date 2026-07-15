@@ -3,12 +3,14 @@
 用法: python src/score.py <answer.csv> [<ground_truth.csv>]
 评测规则:单选/判断取首字母;多选去重排序后完全匹配(无部分分)。
 """
+import argparse
 import csv
-import sys
+import json
 from pathlib import Path
 
+from config import QUESTIONS_ROOT
+
 GT_DEFAULT = str(Path(__file__).resolve().parent.parent / "output" / "answer_group_a.csv")
-Q_DIR = Path("/Users/bytedance/Documents/AFAC2026文件/public_dataset_upload/questions/group_a")
 Q_FILES = {
     "insurance": "insurance_questions.json",
     "financial_reports": "financial_reports_questions.json",
@@ -36,14 +38,21 @@ def load_csv(path):
 
 
 def main():
-    import json
-    pred_path = sys.argv[1]
-    gt_path = sys.argv[2] if len(sys.argv) > 2 else GT_DEFAULT
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("prediction", type=Path)
+    parser.add_argument("ground_truth", type=Path, nargs="?", default=Path(GT_DEFAULT))
+    parser.add_argument("--questions-dir", type=Path, default=QUESTIONS_ROOT)
+    args = parser.parse_args()
+    pred_path = args.prediction
+    gt_path = args.ground_truth
 
     # qid -> (domain, fmt)
     meta = {}
     for dom, fn in Q_FILES.items():
-        for q in json.loads((Q_DIR / fn).read_text(encoding="utf-8")):
+        path = args.questions_dir / fn
+        if not path.exists():
+            parser.error(f"题目文件不存在: {path}；请通过 --questions-dir 指定题目目录")
+        for q in json.loads(path.read_text(encoding="utf-8")):
             meta[q["qid"]] = (dom, q["answer_format"])
 
     pred = load_csv(pred_path)
