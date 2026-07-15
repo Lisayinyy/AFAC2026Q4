@@ -157,6 +157,7 @@ class DocRetriever:
         domain: str = "",
         use_rerank: bool = False,
         prefer_doc_balance: bool = False,
+        allowed_doc_ids: list[str] | None = None,
     ) -> list[dict]:
         """为单个选项检索证据，保留跨文档覆盖。
 
@@ -167,17 +168,31 @@ class DocRetriever:
         if not self.bm25:
             return []
 
+        allowed = set(allowed_doc_ids) if allowed_doc_ids is not None else None
+        active_doc_ids = [
+            doc_id for doc_id in self.doc_ids
+            if allowed is None or doc_id in allowed
+        ]
+        if not active_doc_ids:
+            return []
+
+        def allowed_rank(query: str) -> list[int]:
+            return [
+                idx for idx in self._bm25_rank(query)
+                if self.chunks[idx]["doc_id"] in active_doc_ids
+            ]
+
         clean_queries = [q.strip() for q in queries if q and q.strip()]
         if not clean_queries:
             clean_queries = [option_text]
 
-        n_docs = max(1, len(self.doc_ids))
+        n_docs = len(active_doc_ids)
         # 每份文档先产生一个保底候选，其余名额由所有文档按选项相关度竞争。
         # 这比平均配额更适合“多个引用文档、但某个选项只对应其中一份”的题目。
         per_doc_depth = max(2, (top_k + n_docs - 1) // n_docs)
         per_doc_candidates: list[list[int]] = []
 
-        for did in self.doc_ids:
+        for did in active_doc_ids:
             doc_idx = [i for i, c in enumerate(self.chunks) if c["doc_id"] == did]
             if not doc_idx:
                 continue
@@ -208,7 +223,7 @@ class DocRetriever:
         ][:top_k]
 
         # 剩余位置按所有查询的全局 RRF + 选项数字/关键词重排竞争。
-        global_rank_lists = [self._bm25_rank(q)[:pool] for q in clean_queries]
+        global_rank_lists = [allowed_rank(q)[:pool] for q in clean_queries]
         global_scores = _rrf(global_rank_lists)
         global_ranked = sorted(global_scores, key=lambda i: global_scores[i], reverse=True)
         seen = set(balanced)
@@ -220,7 +235,7 @@ class DocRetriever:
         # 极端情况下某份文档没有候选，再按全局结果补齐。
         seen = set(balanced)
         if len(balanced) < top_k:
-            all_ranks = [_rrf([self._bm25_rank(q)[:pool]]) for q in clean_queries]
+            all_ranks = [_rrf([allowed_rank(q)[:pool]]) for q in clean_queries]
             global_scores: dict[int, float] = {}
             for scores in all_ranks:
                 for idx, score in scores.items():

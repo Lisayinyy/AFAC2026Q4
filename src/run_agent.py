@@ -55,7 +55,12 @@ def main() -> None:
     args = ap.parse_args()
 
     OUTPUT_ROOT.mkdir(exist_ok=True)
-    questions = load_questions(args.domains)
+    # 保留完整题目目录，用于定向断点续跑时维持已有 CSV 的全部行。
+    catalog = load_questions(None)
+    questions = [
+        q for q in catalog
+        if args.domains is None or q["domain"] in set(args.domains)
+    ]
     if args.qids:
         wanted = set(args.qids)
         questions = [q for q in questions if q["qid"] in wanted]
@@ -70,6 +75,8 @@ def main() -> None:
     trace_path = OUTPUT_ROOT / f"{csv_path.stem}_traces.jsonl"
     rows_by_qid: dict[str, dict] = {}
     traces_by_qid: dict[str, dict] = {}
+    retry_usage_by_qid: dict[str, dict[str, int]] = {}
+    output_questions = questions
     lock = threading.Lock()
     t0 = time.time()
 
@@ -86,6 +93,13 @@ def main() -> None:
                         "completion_tokens": int(row.get("completion_tokens") or 0),
                         "total_tokens": total,
                     }
+                elif total > 0:
+                    # 失败调用同样产生计费 Token；成功重试时必须累计，不能覆盖。
+                    retry_usage_by_qid[row["qid"]] = {
+                        "prompt_tokens": int(row.get("prompt_tokens") or 0),
+                        "completion_tokens": int(row.get("completion_tokens") or 0),
+                        "total_tokens": total,
+                    }
         if trace_path.exists():
             with trace_path.open(encoding="utf-8") as f:
                 for line in f:
@@ -95,6 +109,13 @@ def main() -> None:
                         continue
                     if trace.get("qid"):
                         traces_by_qid[trace["qid"]] = trace
+        # --qids 只限制本次需要执行的题，不能把同一结果文件中其他已完成题裁掉。
+        preserved_qids = (
+            set(rows_by_qid)
+            | set(retry_usage_by_qid)
+            | {q["qid"] for q in questions}
+        )
+        output_questions = [q for q in catalog if q["qid"] in preserved_qids]
         print(f"[RESUME] 已完成 {len(rows_by_qid)} 题", flush=True)
 
     pending = [q for q in questions if q["qid"] not in rows_by_qid]
@@ -115,11 +136,11 @@ def main() -> None:
                 "completion_tokens": completion,
                 "total_tokens": total,
             })
-            for q in questions:
+            for q in output_questions:
                 if q["qid"] in rows_by_qid:
                     writer.writerow(rows_by_qid[q["qid"]])
         with trace_path.open("w", encoding="utf-8") as f:
-            for q in questions:
+            for q in output_questions:
                 if q["qid"] in traces_by_qid:
                     f.write(json.dumps(traces_by_qid[q["qid"]], ensure_ascii=False) + "\n")
 
@@ -158,17 +179,21 @@ def main() -> None:
             q, answer, trace, meter = future.result()
             with lock:
                 done += 1
+                debt = retry_usage_by_qid.get(q["qid"], {})
+                prompt_tokens = meter.prompt_tokens + debt.get("prompt_tokens", 0)
+                completion_tokens = meter.completion_tokens + debt.get("completion_tokens", 0)
+                total_tokens = meter.total_tokens + debt.get("total_tokens", 0)
                 rows_by_qid[q["qid"]] = {
                     "qid": q["qid"], "answer": answer,
-                    "prompt_tokens": meter.prompt_tokens,
-                    "completion_tokens": meter.completion_tokens,
-                    "total_tokens": meter.total_tokens,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
                 }
                 traces_by_qid[q["qid"]] = trace
                 total = sum(r["total_tokens"] for r in rows_by_qid.values())
                 print(
                     f"[{done}/{len(pending)}] {q['qid']} -> {answer or 'ERROR'} "
-                    f"| +{meter.total_tokens} tok | 累计={total} "
+                    f"| +{total_tokens} tok | 累计={total} "
                     f"| review={len(trace.get('review_targets', []))}",
                     flush=True,
                 )
@@ -184,7 +209,7 @@ def main() -> None:
         "completion_tokens": completion,
         "token_budget": TOKEN_BUDGET,
         "token_score": round(token_score(total), 4),
-        "num_questions": len(questions),
+        "num_questions": len(output_questions),
         "num_answered": sum(bool(r["answer"]) for r in rows_by_qid.values()),
         "num_reviewed_questions": sum(
             bool(t.get("review_targets")) for t in traces_by_qid.values()

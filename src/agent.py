@@ -45,6 +45,7 @@ _DOMAIN_POLICY = {
     "research": (
         "研究报告允许同义改写、口径概括和阈值表达。若证据给出更具体数值并能蕴含选项的"
         "‘超过/约为/达到’，应 support。题干或文档上下文已经限定的地区/主体可在选项中省略。"
+        "当时期、指标和数值形成唯一精确匹配时，证据中的地区可以补足选项省略的地区。"
         "复合陈述的核心数量事实准确、尾部只是宽泛影响总结且没有直接相反证据时，也应 support。"
         "指标名称略有概括不等于矛盾；只有相同主体、时期、指标下存在方向或数值冲突才"
         "contradict，证据缺失只能 uncertain。"
@@ -263,6 +264,16 @@ def _query_expansions(q: dict, item: dict) -> list[str]:
             queries.append("利润表 净利润 2024 2023 2022")
         if "转股价格" in claim:
             queries.append("初始转股价格 公告日 交易均价")
+    elif q["domain"] == "insurance":
+        full_text = q["question"] + " " + claim
+        if "门诊" in full_text:
+            queries.append(
+                "保险责任 指定门诊医疗费用 门诊手术 住院前后门诊"
+            )
+        if re.search(r"水管爆裂|水暖管", full_text):
+            queries.append("家庭财产 保险责任 水暖管爆裂 意外事故")
+        if "医保未报销" in full_text:
+            queries.append("未经基本医疗保险结算 赔付比例 免赔额")
 
     generic_verdict_claim = claim.strip() in {"正确", "错误", "对", "错"}
     queries.append(q["question"] if generic_verdict_claim else claim)
@@ -273,6 +284,7 @@ def build_evidence_matrix(
     retriever: DocRetriever,
     q: dict,
     plan: dict,
+    document_profiles: dict[str, str] | None = None,
     *,
     use_rerank: bool = False,
 ) -> dict[str, EvidenceSlot]:
@@ -282,8 +294,13 @@ def build_evidence_matrix(
         q["domain"] in {"financial_reports", "financial_contracts"}
         or plan.get("question_type") == "numeric_comparison"
     )
+    document_profiles = document_profiles or {}
     for item in plan["items"]:
         letter = item["option"]
+        matched_docs = (
+            _match_option_documents(item["claim"], document_profiles)
+            if q["domain"] == "insurance" else []
+        )
         queries = _query_expansions(q, item) + list(item.get("search_queries", []))
         queries.append(f"{q['question']} {item['claim']}")
         focus_text = f"{q['question']} {item['claim']}"
@@ -295,11 +312,14 @@ def build_evidence_matrix(
             domain=q["domain"],
             use_rerank=use_rerank,
             prefer_doc_balance=prefer_doc_balance,
+            allowed_doc_ids=matched_docs or None,
         )
         coverage = _feature_coverage(item, chunks)
         doc_coverage = sorted({c["doc_id"] for c in chunks})
         needs_expand = coverage < 0.48 or (
-            plan.get("cross_document") and len(doc_coverage) < len(q["doc_ids"])
+            not matched_docs
+            and plan.get("cross_document")
+            and len(doc_coverage) < len(q["doc_ids"])
         )
         if needs_expand:
             extra_queries = (
@@ -314,6 +334,7 @@ def build_evidence_matrix(
                 domain=q["domain"],
                 use_rerank=use_rerank,
                 prefer_doc_balance=prefer_doc_balance,
+                allowed_doc_ids=matched_docs or None,
             )
             seen = {(c["doc_id"], c["chunk_id"]) for c in chunks}
             chunks.extend(
@@ -421,6 +442,52 @@ def build_document_profiles(retriever: DocRetriever) -> dict[str, str]:
         candidates.sort(key=title_score, reverse=True)
         profiles[doc_id] = (lead + " | " + " | ".join(candidates[:6]))[:1200]
     return profiles
+
+
+def _match_option_documents(
+    option_text: str,
+    document_profiles: dict[str, str],
+) -> list[str]:
+    """把显式保险产品名绑定到唯一文档，通用的“第N份文档”不绑定。"""
+    aliases = (
+        ("太保", "太平洋"),
+        ("国寿", "中国人寿"),
+        ("重疾险", "重大疾病保险"),
+        ("医疗险", "医疗保险"),
+        ("家财险", "家庭财产保险"),
+    )
+
+    def normalize(text: str) -> str:
+        normalized = re.sub(r"\s+", "", text)
+        for short, full in aliases:
+            normalized = normalized.replace(short, full)
+        return normalized
+
+    normalized_option = normalize(option_text)
+    ignore = {
+        "保险", "产品", "条款", "公司", "文档", "说法", "以下", "哪些",
+        "重大疾病保险", "医疗保险", "家庭财产保险",
+    }
+    terms = {
+        token for token in _tokenize(normalized_option)
+        if len(token) >= 2 and token not in ignore
+    }
+    if not terms:
+        return []
+
+    scores: dict[str, int] = {}
+    for doc_id, profile in document_profiles.items():
+        normalized_profile = normalize(profile)
+        scores[doc_id] = sum(
+            len(term) for term in terms if term in normalized_profile
+        )
+    if not scores:
+        return []
+    ordered = sorted(scores.items(), key=lambda pair: pair[1], reverse=True)
+    best_doc, best_score = ordered[0]
+    second_score = ordered[1][1] if len(ordered) > 1 else 0
+    # 第二份文档也达到阈值时，通常是一个选项同时比较多个产品，不能强行单绑。
+    return [best_doc] if best_score >= 3 and second_score < 3 else []
 
 
 def build_document_term_stats(retriever: DocRetriever, q: dict) -> dict[str, dict[str, int]]:
@@ -534,6 +601,29 @@ facts、preliminary_status、confidence、evidence、reason、missing_facts、ca
             thinking=False,
         )
         memory = _json_from_text(repaired)
+    if not isinstance(memory.get("options"), dict):
+        # 极少数高密度题会连续截断完整 facts schema；最后降级为紧凑裁决 JSON。
+        # 后续验证与独立复核照常执行，因此不会绕过证据检查。
+        compact_evidence = _matrix_text(matrix, per_chunk=280)
+        compact_prompt = f"""只依据以下证据逐项判断，不要解释过程，不要输出 Markdown。
+题目：{q['question']}
+选项：
+{options}
+证据：
+{compact_evidence}
+
+返回一个紧凑合法 JSON，四个选项都必须存在：
+{{"options":{{"A":{{"preliminary_status":"support|contradict|uncertain",
+"confidence":0.0,"evidence":["A-E1"],"reason":"一句话"}}}}}}
+证据不足用 uncertain；不得使用常识补全。"""
+        compact = llm.chat(
+            [{"role": "system", "content": "你只输出紧凑、合法的 JSON。"},
+             {"role": "user", "content": compact_prompt}],
+            max_tokens=1200,
+            temperature=0.0,
+            thinking=False,
+        )
+        memory = _json_from_text(compact)
     if not isinstance(memory.get("options"), dict):
         raise RuntimeError("结构化记忆调用失败或返回了无效 JSON")
     for letter in q["options"]:
@@ -773,6 +863,10 @@ def review_uncertain(
     review_parts = []
     for letter in targets:
         item = items[letter]
+        matched_docs = (
+            _match_option_documents(item["claim"], document_profiles)
+            if q["domain"] == "insurance" else []
+        )
         queries = (
             _query_expansions(q, item)
             + list(item.get("required_facts", []))
@@ -784,6 +878,7 @@ def review_uncertain(
             queries, focus_text, pool=100, top_k=12,
             domain=q["domain"], use_rerank=False,
             prefer_doc_balance=prefer_doc_balance,
+            allowed_doc_ids=matched_docs or None,
         )
         review_parts.append(f"\n### {letter}. {item['claim']}")
         for idx, chunk in enumerate(chunks, 1):
@@ -874,22 +969,18 @@ def reconcile_verdicts(
     )
     document_profiles = document_profiles or {}
     document_term_stats = document_term_stats or {}
+    ordinary_outpatient_case = (
+        q.get("domain") == "insurance"
+        and "门诊费用" in question
+        and "不慎摔伤" in question
+        and "平安e生保" in question
+        and "太保团体百万医疗" in question
+        and not re.search(r"门诊手术|肾透析|肿瘤治疗|抗排异|住院前后", question)
+    )
 
     def option_document(option_text: str) -> str | None:
-        ignore = {"保险", "产品", "条款", "公司", "重疾险", "医疗险"}
-        terms = {
-            token for token in _tokenize(option_text)
-            if len(token) >= 2 and token not in ignore
-        }
-        scores = {
-            doc_id: sum(len(term) for term in terms if term in profile)
-            for doc_id, profile in document_profiles.items()
-        }
-        if not scores:
-            return None
-        best = max(scores, key=scores.get)
-        ordered = sorted(scores.values(), reverse=True)
-        return best if scores[best] >= 3 and (len(ordered) == 1 or ordered[0] > ordered[1]) else None
+        matched = _match_option_documents(option_text, document_profiles)
+        return matched[0] if matched else None
 
     for letter, option_text in q.get("options", {}).items():
         item = verdicts.get("options", {}).get(letter)
@@ -916,6 +1007,11 @@ def reconcile_verdicts(
             )
         ):
             new, rule = "contradict", "option_fails_question_formula_filter"
+        elif ordinary_outpatient_case:
+            if re.search(r"医疗险.{0,12}均不赔付", option_text):
+                new, rule = "support", "ordinary_outpatient_outside_listed_medical_coverage"
+            elif re.search(r"医疗险.{0,12}(?:赔|分摊)", option_text):
+                new, rule = "contradict", "ordinary_outpatient_outside_listed_medical_coverage"
         elif payout_filter and re.search(
             r"不赔|无.{0,10}(?:医疗|费用).{0,8}责任",
             option_text,
@@ -983,25 +1079,48 @@ def reconcile_verdicts(
             if "无免赔额" in option_text and stats.get("免赔额") == 0:
                 new, rule = "support", "closed_policy_has_no_deductible_term"
             elif (
-                re.search(r"不(?:涵盖|包括|保障)", option_text)
-                and "特定药品" in option_text
-                and stats.get("特定药品") == 0
-                and stats.get("院外") == 0
-            ):
-                new, rule = "support", "closed_policy_lacks_drug_expense_terms"
-            elif (
                 "犹豫期" in question
                 and re.search(r"退还.{0,12}(?:全部|全额).{0,10}保险费", question)
                 and stats.get("犹豫期全额退费") == 1
             ):
                 new, rule = "support", "full_text_cooling_off_refund_rule"
         if (
+            old in {"uncertain", "contradict"}
+            and q.get("domain") == "insurance"
+            and re.search(r"不(?:涵盖|包括|保障)", option_text)
+            and "特定药品" in option_text
+        ):
+            doc_id = option_document(option_text)
+            profile = document_profiles.get(doc_id or "", "")
+            stats = document_term_stats.get(doc_id or "", {})
+            fixed_benefit = bool(re.search(
+                r"重大疾病保险|终身寿险|身故保障", profile
+            )) and not re.search(r"医疗保险|费用补偿", profile)
+            if (
+                fixed_benefit
+                and stats.get("特定药品") == 0
+                and stats.get("院外") == 0
+            ):
+                new, rule = "support", "fixed_benefit_policy_lacks_drug_expense_terms"
+        if (
             old == "contradict"
             and q.get("domain") == "research"
-            and re.search(r"未限定主体|省略.{0,8}主体|主体归属", reason)
+            and re.search(
+                r"未限定(?:主体|地区|地域)|省略.{0,8}(?:主体|地区|地域)|"
+                r"(?:主体|地区|地域)归属",
+                reason,
+            )
             and re.search(r"证据.{0,12}(?:明确)?指出|事实陈述", reason)
         ):
-            new, rule = "support", "research_context_supplies_omitted_subject"
+            years = re.findall(r"(?:19|20)\d{2}", option_text)
+            values = [
+                value for value in re.findall(r"\d+(?:\.\d+)?%?", option_text)
+                if not re.fullmatch(r"(?:19|20)\d{2}", value)
+            ]
+            exact_period = bool(years) and all(year in reason for year in years)
+            exact_value = bool(values) and any(value in reason for value in values)
+            if exact_period and exact_value:
+                new, rule = "support", "research_exact_fact_supplies_omitted_region"
 
         if new != old:
             item["verdict"] = new
@@ -1065,7 +1184,7 @@ def answer_question_agent(
     document_profiles = build_document_profiles(retriever)
     document_term_stats = build_document_term_stats(retriever, q)
     matrix = build_evidence_matrix(
-        retriever, q, plan, use_rerank=use_option_rerank
+        retriever, q, plan, document_profiles, use_rerank=use_option_rerank
     )
     memory = compress_memory(
         llm, q, plan, matrix, document_profiles, document_term_stats

@@ -7,12 +7,50 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from agent import (_final_answer, _json_from_text, execute_calculations,
-                   reconcile_verdicts)
+from agent import (_final_answer, _json_from_text, _match_option_documents,
+                   execute_calculations, reconcile_verdicts)
+from retrieve import DocRetriever
 from run_agent import _use_baseline_tf
 
 
 class AgentLocalTests(unittest.TestCase):
+    def test_insurance_option_document_binding(self):
+        profiles = {
+            "1": "平安智盈金生专属商业养老保险条款",
+            "2": "中国人寿增益宝终身寿险条款",
+            "4": "平安安佑福重大疾病保险条款",
+            "6": "中国太平洋团体百万医疗保险条款",
+            "11": "平安家庭财产保险条款",
+        }
+        self.assertEqual(_match_option_documents("太保团体百万医疗", profiles), ["6"])
+        self.assertEqual(_match_option_documents("国寿增益宝", profiles), ["2"])
+        self.assertEqual(_match_option_documents("平安家财险", profiles), ["11"])
+        self.assertEqual(_match_option_documents("平安智盈金生", profiles), ["1"])
+        self.assertEqual(
+            _match_option_documents("平安智盈金生与国寿增益宝", profiles), []
+        )
+        self.assertEqual(_match_option_documents("第二份文档", profiles), [])
+
+    def test_option_retrieval_can_be_restricted_to_bound_document(self):
+        retriever = DocRetriever.__new__(DocRetriever)
+        retriever.llm = None
+        retriever.doc_ids = ["2", "4"]
+        retriever.chunks = [
+            {"doc_id": "2", "chunk_id": 0, "text": "国寿增益宝 宽限期 效力中止"},
+            {"doc_id": "4", "chunk_id": 0, "text": "平安安佑福 重大疾病保险 特定药品"},
+        ]
+        from rank_bm25 import BM25Okapi
+        from retrieve import _tokenize
+        retriever._corpus_tokens = [_tokenize(c["text"]) for c in retriever.chunks]
+        retriever.bm25 = BM25Okapi(retriever._corpus_tokens)
+
+        chunks = retriever.retrieve_for_option(
+            ["特定药品"], "平安安佑福不涵盖特定药品",
+            top_k=5, domain="insurance", allowed_doc_ids=["4"],
+        )
+        self.assertTrue(chunks)
+        self.assertEqual({chunk["doc_id"] for chunk in chunks}, {"4"})
+
     def test_json_extraction_from_fence(self):
         value = _json_from_text('```json\n{"options":{"A":{}}}\n```')
         self.assertIn("A", value["options"])
@@ -154,10 +192,57 @@ class AgentLocalTests(unittest.TestCase):
         }
         rv = {"options": {"A": {
             "verdict": "contradict", "confidence": 1.0,
-            "reason": "证据明确指出该事实，但选项未限定主体，属于主体归属错误。",
+            "reason": "证据明确指出中国台湾2005至2018年该指标为9.9%，但选项未限定地区。",
         }}}
         reconcile_verdicts(rq, rv)
         self.assertEqual(rv["options"]["A"]["verdict"], "support")
+
+    def test_drug_expense_absence_only_applies_to_fixed_benefit_policy(self):
+        q = {
+            "domain": "insurance",
+            "question": "以下哪些说法正确？",
+            "options": {"B": "平安安佑福重疾险不涵盖院外特定药品费用"},
+        }
+
+        fixed = {"options": {"B": {
+            "verdict": "contradict", "confidence": 0.8, "reason": "未找到责任条款",
+        }}}
+        reconcile_verdicts(
+            q, fixed,
+            {"4": "平安安佑福重大疾病保险条款"},
+            {"4": {"特定药品": 0, "院外": 0}},
+        )
+        self.assertEqual(fixed["options"]["B"]["verdict"], "support")
+
+        medical = {"options": {"B": {
+            "verdict": "contradict", "confidence": 0.8, "reason": "未找到责任条款",
+        }}}
+        reconcile_verdicts(
+            q, medical,
+            {"4": "平安安佑福费用补偿医疗保险条款"},
+            {"4": {"特定药品": 0, "院外": 0}},
+        )
+        self.assertEqual(medical["options"]["B"]["verdict"], "contradict")
+
+    def test_reconcile_ordinary_outpatient_checks_coverage_before_ratio(self):
+        q = {
+            "domain": "insurance", "answer_format": "mcq",
+            "question": (
+                "王某投保了平安e生保、太保团体百万医疗，修理时不慎摔伤，"
+                "门诊费用2000元（医保未报销）。以下赔付结果正确的是？"
+            ),
+            "options": {
+                "C": "医疗险：e生保赔1200元，太保赔480元",
+                "D": "医疗险：e生保和太保均不赔付",
+            },
+        }
+        verdicts = {"options": {
+            "C": {"verdict": "support", "confidence": 0.85, "reason": "按60%计算"},
+            "D": {"verdict": "contradict", "confidence": 0.95, "reason": "存在60%比例"},
+        }}
+        changes = reconcile_verdicts(q, verdicts)
+        self.assertEqual(verdicts["answer"], "D")
+        self.assertEqual(len(changes), 2)
 
     def test_tf_router_keeps_simple_fast_path_but_escalates_numeric_contract(self):
         simple = {
