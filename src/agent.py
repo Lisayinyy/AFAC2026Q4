@@ -439,7 +439,13 @@ def _best_excerpt(text: str, focus: str, max_chars: int) -> str:
         ]
         anchor = max(scored, default=(0, 0))[1]
         # 表头与命中行的前后行一起保留，绝不在单元格中间截断。
-        ordered = list(dict.fromkeys([0, 1] + list(range(max(0, anchor - 2), min(len(lines), anchor + 3)))))
+        ordered = [
+            index for index in dict.fromkeys(
+                [0, 1]
+                + list(range(max(0, anchor - 2), min(len(lines), anchor + 3)))
+            )
+            if 0 <= index < len(lines)
+        ]
         chosen: list[str] = []
         used = 0
         for index in ordered:
@@ -658,6 +664,30 @@ facts、preliminary_status、confidence、evidence、reason、missing_facts、ca
             thinking=False,
         )
         memory = _json_from_text(repaired)
+    if not isinstance(memory.get("options"), dict):
+        # Some endpoints can repeatedly truncate the verbose facts schema for one
+        # unusually dense question. Fall back to a compact evidence-grounded
+        # verdict schema; normal validation/review still runs afterwards.
+        compact_evidence = _matrix_text(matrix, per_chunk=280)
+        compact_prompt = f"""只依据以下证据逐项判断，不要解释过程，不要输出 Markdown。
+题目：{q['question']}
+选项：
+{options}
+证据：
+{compact_evidence}
+
+返回一个紧凑合法 JSON，四个选项都必须存在：
+{{"options":{{"A":{{"preliminary_status":"support|contradict|uncertain",
+"confidence":0.0,"evidence":["A-E1"],"reason":"一句话"}}}}}}
+证据不足用 uncertain；不得使用常识补全。"""
+        compact = llm.chat(
+            [{"role": "system", "content": "你只输出紧凑、合法的 JSON。"},
+             {"role": "user", "content": compact_prompt}],
+            max_tokens=1200,
+            temperature=0.0,
+            thinking=False,
+        )
+        memory = _json_from_text(compact)
     if not isinstance(memory.get("options"), dict):
         raise RuntimeError("结构化记忆调用失败或返回了无效 JSON")
     for letter in q["options"]:

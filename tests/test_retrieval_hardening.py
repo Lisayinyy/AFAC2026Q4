@@ -62,6 +62,7 @@ def test_context_and_excerpt_preserve_complete_table_rows():
     excerpt = _best_excerpt(chunks[0]["text"], "2024年净利润20亿元", 55)
     assert "年份 | 净利润" in excerpt
     assert "2024 | 20亿元" in excerpt
+    assert _best_excerpt("[表格]", "保险责任", 55) == "[表格]"
 
 
 def test_review_flip_requires_stronger_cited_evidence():

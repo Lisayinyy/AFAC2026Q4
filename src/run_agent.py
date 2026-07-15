@@ -70,6 +70,7 @@ def main() -> None:
     trace_path = OUTPUT_ROOT / f"{csv_path.stem}_traces.jsonl"
     rows_by_qid: dict[str, dict] = {}
     traces_by_qid: dict[str, dict] = {}
+    retry_usage_by_qid: dict[str, dict[str, int]] = {}
     lock = threading.Lock()
     t0 = time.time()
 
@@ -82,6 +83,15 @@ def main() -> None:
                 if total > 0 and (row.get("answer") or "").strip():
                     rows_by_qid[row["qid"]] = {
                         "qid": row["qid"], "answer": row["answer"],
+                        "prompt_tokens": int(row.get("prompt_tokens") or 0),
+                        "completion_tokens": int(row.get("completion_tokens") or 0),
+                        "total_tokens": total,
+                    }
+                elif total > 0:
+                    # A failed/invalid-JSON call still consumed billable tokens.
+                    # Carry that usage into the successful retry row so the final
+                    # submission never under-reports total API consumption.
+                    retry_usage_by_qid[row["qid"]] = {
                         "prompt_tokens": int(row.get("prompt_tokens") or 0),
                         "completion_tokens": int(row.get("completion_tokens") or 0),
                         "total_tokens": total,
@@ -158,17 +168,21 @@ def main() -> None:
             q, answer, trace, meter = future.result()
             with lock:
                 done += 1
+                debt = retry_usage_by_qid.get(q["qid"], {})
+                prompt_tokens = meter.prompt_tokens + debt.get("prompt_tokens", 0)
+                completion_tokens = meter.completion_tokens + debt.get("completion_tokens", 0)
+                total_tokens = meter.total_tokens + debt.get("total_tokens", 0)
                 rows_by_qid[q["qid"]] = {
                     "qid": q["qid"], "answer": answer,
-                    "prompt_tokens": meter.prompt_tokens,
-                    "completion_tokens": meter.completion_tokens,
-                    "total_tokens": meter.total_tokens,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
                 }
                 traces_by_qid[q["qid"]] = trace
                 total = sum(r["total_tokens"] for r in rows_by_qid.values())
                 print(
                     f"[{done}/{len(pending)}] {q['qid']} -> {answer or 'ERROR'} "
-                    f"| +{meter.total_tokens} tok | 累计={total} "
+                    f"| +{total_tokens} tok | 累计={total} "
                     f"| review={len(trace.get('review_targets', []))}",
                     flush=True,
                 )
