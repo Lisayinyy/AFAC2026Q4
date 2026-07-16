@@ -1,4 +1,4 @@
-"""用标准答案给 answer.csv 打分,按领域/题型拆解正确率。
+"""比较 answer.csv 与显式标准答案，按领域/题型拆解一致率。
 
 用法: python src/score.py <answer.csv> [<ground_truth.csv>]
 评测规则:单选/判断取首字母;多选去重排序后完全匹配(无部分分)。
@@ -7,7 +7,9 @@ import csv
 import sys
 from pathlib import Path
 
-GT_DEFAULT = str(Path(__file__).resolve().parent.parent / "output" / "answer_group_a.csv")
+# 这是历史提交得到的基线答案，不是官方 ground truth。保留它只是为了让
+# 旧的离线对比命令仍可运行；main() 会明确把结果标成“非官方基线一致率”。
+BASELINE_DEFAULT = str(Path(__file__).resolve().parent.parent / "output" / "answer_group_a.csv")
 Q_DIR = Path("/Users/bytedance/Documents/AFAC2026文件/public_dataset_upload/questions/group_a")
 Q_FILES = {
     "insurance": "insurance_questions.json",
@@ -38,7 +40,13 @@ def load_csv(path):
 def main():
     import json
     pred_path = sys.argv[1]
-    gt_path = sys.argv[2] if len(sys.argv) > 2 else GT_DEFAULT
+    gt_explicit = len(sys.argv) > 2
+    gt_path = sys.argv[2] if gt_explicit else BASELINE_DEFAULT
+    if not gt_explicit:
+        print(
+            "WARNING: 未提供官方标准答案；以下仅是与历史 "
+            "output/answer_group_a.csv 的一致率，不能当作天池官方分数。"
+        )
 
     # qid -> (domain, fmt)
     meta = {}
@@ -70,7 +78,11 @@ def main():
             wrong.append((qid, dom, fmt, norm(p, fmt), norm(g, fmt)))
 
     acc = total_c / total_n if total_n else 0
-    print(f"=== 总正确率: {total_c}/{total_n} = {acc:.3f} ===\n")
+    if gt_explicit:
+        title = "与显式标准答案的一致率"
+    else:
+        title = "与历史基线的一致率（非官方）"
+    print(f"=== {title}: {total_c}/{total_n} = {acc:.3f} ===\n")
     print("按领域:")
     for dom, (c, n) in sorted(by_dom.items()):
         print(f"  {dom:20s}: {c}/{n} = {c/n:.2f}")
