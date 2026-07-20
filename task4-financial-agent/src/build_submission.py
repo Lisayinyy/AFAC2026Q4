@@ -1,6 +1,6 @@
-"""从 95 分基准答案生成排行榜约束可达 100 分的第一探针。
+"""从 95 分基准答案生成排行榜约束探针。
 
-默认输入不做原地修改，输出到 output/probe_1_candidate_100.csv。
+默认输入不做原地修改，输出到 output/probe_v3_p1_fc7.csv。
 生成过程中会校验题数、QID 唯一性、答案格式、修正数量和 Token 字段，
 任一条件不满足都会直接报错，避免上传格式错误的文件。
 """
@@ -14,10 +14,9 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_BASE = PROJECT_ROOT / "output" / "answer_group_a.csv"
-PROBE_1_OUTPUT = PROJECT_ROOT / "output" / "probe_1_candidate_100.csv"
-PROBE_2_IF_99_OUTPUT = (
-    PROJECT_ROOT / "output" / "probe_2_if_99_fc15_D.csv"
-)
+PROBE_V3_P1_OUTPUT = PROJECT_ROOT / "output" / "probe_v3_p1_fc7.csv"
+LEGACY_PROBE_1_OUTPUT = PROJECT_ROOT / "output" / "probe_1_candidate_100.csv"
+LEGACY_PROBE_2_IF_99_OUTPUT = PROJECT_ROOT / "output" / "probe_2_if_99_fc15_D.csv"
 FIELDS = [
     "qid",
     "answer",
@@ -26,24 +25,29 @@ FIELDS = [
     "total_tokens",
 ]
 
-# 2026-07-13 第一探针：由可信的官方正确题数联合约束筛出。
-# 这五个答案可以同时满足全部可信历史运行，并存在 100/100 的隐藏标签配置。
-# fc_a_015 的另一数学可行标签为 D；先测试 C，若首轮为 99/100 且其余四项
-# 命中，则第二轮只需将该题改为 D。
-PROBE_1_CORRECTIONS = {
+# 2026-07-20 第一探针：加入公开且可精确反推为 67/79 题正确的 hautdong
+# V2/V4 官网运行后重新条件化。该组合在当前硬约束下存在 100/100 配置，
+# 但尚未获得官网验证。fc_a_007 的原文答案仍为 BD；这里的 B 是针对可能
+# 隐藏标注漏掉深层违约条款 D 的定向测试，不能描述成已知标准答案。
+PROBE_V3_P1_CORRECTIONS = {
+    "fc_a_004": "AC",
+    "fc_a_007": "B",
+    "fc_a_014": "BC",
+    "fc_a_015": "C",
+    "ins_a_006": "A",
+}
+
+# 2026-07-13 的旧探针只为复现历史审计保留。新增官网运行已排除它们达到
+# 100/100 的可能性，严禁继续作为默认提交文件。
+LEGACY_PROBE_1_CORRECTIONS = {
     "fc_a_014": "BC",
     "fc_a_015": "C",
     "fc_a_020": "AB",
     "fin_a_008": "A",
     "res_a_004": "B",
 }
-
-# 仅在第一探针获得 99/100、并重新确认条件化结论后使用。第一探针为
-# 99 分时，约束把唯一错题缩小到 fc_a_014、fc_a_015、res_a_004；原文证据
-# 最支持 fc_a_014=BC，而 fc_a_015 的可行标签被硬约束限定为 C/D，因此优先
-# 只测试 C -> D。它不是无条件第二提交，其他首轮分数必须重新求解。
-PROBE_2_IF_99_CORRECTIONS = {
-    **PROBE_1_CORRECTIONS,
+LEGACY_PROBE_2_IF_99_CORRECTIONS = {
+    **LEGACY_PROBE_1_CORRECTIONS,
     "fc_a_015": "D",
 }
 
@@ -133,19 +137,22 @@ def main() -> None:
     parser.add_argument("--base", type=Path, default=DEFAULT_BASE)
     parser.add_argument(
         "--probe",
-        choices=("1", "2-if-99"),
-        default="1",
-        help="生成第一探针，或仅适用于第一探针得分为 99 的条件探针",
+        choices=("v3-p1", "legacy-v2-p1", "legacy-v2-p2-if-99"),
+        default="v3-p1",
+        help="生成 2026-07-20 新探针；旧探针只用于复现，不应提交",
     )
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
-    if args.probe == "1":
-        corrections = PROBE_1_CORRECTIONS
-        default_output = PROBE_1_OUTPUT
+    if args.probe == "v3-p1":
+        corrections = PROBE_V3_P1_CORRECTIONS
+        default_output = PROBE_V3_P1_OUTPUT
+    elif args.probe == "legacy-v2-p1":
+        corrections = LEGACY_PROBE_1_CORRECTIONS
+        default_output = LEGACY_PROBE_1_OUTPUT
     else:
-        corrections = PROBE_2_IF_99_CORRECTIONS
-        default_output = PROBE_2_IF_99_OUTPUT
+        corrections = LEGACY_PROBE_2_IF_99_CORRECTIONS
+        default_output = LEGACY_PROBE_2_IF_99_OUTPUT
     output = args.output or default_output
 
     changes = build_submission(args.base, output, corrections)
