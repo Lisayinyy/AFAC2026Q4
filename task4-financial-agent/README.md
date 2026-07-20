@@ -83,20 +83,20 @@ public_dataset_upload/
 
 这轮改动已完成离线语法与单测验证；真实 Qwen 全量评测需要配置 `.env` 中的 API 端点和题目/原始文档目录后执行。
 
-基于 95 分答案生成 2026-07-20 重新条件化、理论上可达 100 分的五题探针：
+基于最新 95 分反馈生成重新条件化的五题候选：
 
 ```bash
 python src/build_submission.py
 ```
 
-默认输出为 `output/probe_v3_p1_fc7.csv`。生成器不会覆盖原始的
+默认输出为 `output/probe_v4_candidate_100.csv`。生成器不会覆盖原始的
 `output/answer_group_a.csv`，并会在写出前校验 100 个唯一 QID、答案字母格式、
 修正数量以及 Token 字段。汇总 Token 保持为正数，避免 TokenScore 被平台计为 0。
 
-旧的 `probe_1_candidate_100.csv`、`probe_2_if_99_fc15_D.csv` 和
-`probe_v2_p1c_candidate.csv` 已被新增官网运行证伪为不能达到 100，不应提交。
-新探针得到任何非 100 结果后，都必须把正确题数加入约束重新求解；不再预生成
-无条件第二探针。
+`probe_v3_p1_fc7.csv` 已于 2026-07-20 21:14:59 得到 95.0000，不能再提交。
+该反馈说明其五处变化中有两处改对、两处改错、一处新旧均错。v4 恢复
+`fc_a_007=BD`、`fc_a_015=A`，并采用原文与独立答案共识最强的五处修正。
+v4 仍是待官网验证的候选，不应称为标准答案。
 
 `output/answer_submit_candidate_100.csv` 是已验证只有 92 道正确且汇总 Token 为 0
 的失败版本，不应再次提交。

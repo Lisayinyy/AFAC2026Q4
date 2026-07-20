@@ -1,6 +1,6 @@
 """从 95 分基准答案生成排行榜约束探针。
 
-默认输入不做原地修改，输出到 output/probe_v3_p1_fc7.csv。
+默认输入不做原地修改，输出到 output/probe_v4_candidate_100.csv。
 生成过程中会校验题数、QID 唯一性、答案格式、修正数量和 Token 字段，
 任一条件不满足都会直接报错，避免上传格式错误的文件。
 """
@@ -14,6 +14,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_BASE = PROJECT_ROOT / "output" / "answer_group_a.csv"
+PROBE_V4_OUTPUT = PROJECT_ROOT / "output" / "probe_v4_candidate_100.csv"
 PROBE_V3_P1_OUTPUT = PROJECT_ROOT / "output" / "probe_v3_p1_fc7.csv"
 LEGACY_PROBE_1_OUTPUT = PROJECT_ROOT / "output" / "probe_1_candidate_100.csv"
 LEGACY_PROBE_2_IF_99_OUTPUT = PROJECT_ROOT / "output" / "probe_2_if_99_fc15_D.csv"
@@ -35,6 +36,18 @@ PROBE_V3_P1_CORRECTIONS = {
     "fc_a_014": "BC",
     "fc_a_015": "C",
     "ins_a_006": "A",
+}
+
+# 2026-07-20 第二轮候选。v3-p1 官网仍为 95 后，恢复被探针改错的
+# fc_a_007/fc_a_015，并把 fc_a_014 收敛到原文唯一成立的 B。剩余两个
+# 位置采用逐项原文复核与独立答案家族共识最强的 reg_a_007/res_a_004。
+# 这是待官网验证的 100 分候选，不是已知标准答案。
+PROBE_V4_CORRECTIONS = {
+    "fc_a_004": "AC",
+    "fc_a_014": "B",
+    "ins_a_006": "A",
+    "reg_a_007": "AC",
+    "res_a_004": "AB",
 }
 
 # 2026-07-13 的旧探针只为复现历史审计保留。新增官网运行已排除它们达到
@@ -137,14 +150,17 @@ def main() -> None:
     parser.add_argument("--base", type=Path, default=DEFAULT_BASE)
     parser.add_argument(
         "--probe",
-        choices=("v3-p1", "legacy-v2-p1", "legacy-v2-p2-if-99"),
-        default="v3-p1",
-        help="生成 2026-07-20 新探针；旧探针只用于复现，不应提交",
+        choices=("v4", "v3-p1", "legacy-v2-p1", "legacy-v2-p2-if-99"),
+        default="v4",
+        help="生成最新 v4 候选；旧探针只用于复现，不应提交",
     )
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
-    if args.probe == "v3-p1":
+    if args.probe == "v4":
+        corrections = PROBE_V4_CORRECTIONS
+        default_output = PROBE_V4_OUTPUT
+    elif args.probe == "v3-p1":
         corrections = PROBE_V3_P1_CORRECTIONS
         default_output = PROBE_V3_P1_OUTPUT
     elif args.probe == "legacy-v2-p1":
