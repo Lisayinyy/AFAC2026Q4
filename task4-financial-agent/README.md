@@ -89,9 +89,12 @@ public_dataset_upload/
 python src/build_submission.py
 ```
 
-默认输出为 `output/probe_v4_candidate_100.csv`。生成器不会覆盖原始的
+默认输出为 `output/probe_v4_candidate_100.csv`。生成器不会覆盖已验证的 95 分基线
 `output/answer_group_a.csv`，并会在写出前校验 100 个唯一 QID、答案字母格式、
-修正数量以及 Token 字段。汇总 Token 保持为正数，避免 TokenScore 被平台计为 0。
+修正数量以及 Token 字段。提交时应优先使用 `output/answer_group_a.csv`；
+`probe_v4_candidate_100.csv` 仅为离线研究候选，不能视为 100 分答案。
+
+汇总 Token 保持为正数，避免 TokenScore 被平台计为 0。
 
 `probe_v3_p1_fc7.csv` 已于 2026-07-20 21:14:59 得到 95.0000，不能再提交。
 该反馈说明其五处变化中有两处改对、两处改错、一处新旧均错。v4 恢复
